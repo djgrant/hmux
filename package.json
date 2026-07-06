@@ -1,0 +1,9 @@
+{
+  "name": "humans.sh",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5"
+  }
+}

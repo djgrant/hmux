@@ -1,0 +1,16 @@
+{
+  "name": "@humans/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@humans/protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "effect": "^3.21.4",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts"
+  }
+}

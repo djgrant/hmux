@@ -1,0 +1,15 @@
+{
+  "name": "@humans/tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.tsx"
+  },
+  "dependencies": {
+    "@humans/protocol": "workspace:*",
+    "@opentui/core": "^0.4.3",
+    "@opentui/solid": "^0.4.3",
+    "solid-js": "^1.9.0"
+  }
+}
