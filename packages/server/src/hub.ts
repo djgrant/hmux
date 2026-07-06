@@ -1,6 +1,29 @@
 import { Context, Deferred, Effect, Layer } from "effect"
-import type { Message, ServerEvent } from "@humans/protocol"
+import type { Message, ServerEvent, Session, SessionStatus } from "@humans/protocol"
 import { Store } from "./store"
+
+export interface RegisterSessionInput {
+  id: string
+  agent?: string
+  project?: string
+  model?: string
+}
+
+/** Default agent name: last path segment of the project + short id suffix. */
+const deriveAgent = (input: RegisterSessionInput): string => {
+  const dir = input.project?.split("/").filter(Boolean).pop()
+  return `${dir ?? "agent"}-${input.id.slice(0, 4)}`
+}
+
+/** Minimal session for quiet upsert-registration of unknown session ids. */
+const quietSession = (id: string): Session => ({
+  id,
+  agent: deriveAgent({ id }),
+  status: "working",
+  bound: false,
+  startedAt: Date.now(),
+  lastSeen: Date.now()
+})
 
 /**
  * Hub coordinates the two things that happen around message state changes:
@@ -24,6 +47,27 @@ export class Hub extends Context.Tag("@humans/server/Hub")<
      * No-ops (returns undefined) for unknown or already-answered messages.
      */
     readonly answer: (id: string, text: string) => Effect.Effect<Message | undefined>
+    /** Upsert-register a session and broadcast session.updated. */
+    readonly registerSession: (input: RegisterSessionInput) => Effect.Effect<Session>
+    /**
+     * Update a session's status (bumping last_seen) and broadcast
+     * session.updated. Unknown sessions are quietly upsert-registered first —
+     * hooks can fire in any order for resumed sessions.
+     */
+    readonly updateSessionStatus: (
+      id: string,
+      status: SessionStatus
+    ) => Effect.Effect<Session>
+    /** Mark a session ended and broadcast session.updated. Upserts if unknown. */
+    readonly endSession: (id: string) => Effect.Effect<Session>
+    /**
+     * Set a session's bound flag and broadcast session.updated. No-ops
+     * (returns undefined) for unknown sessions.
+     */
+    readonly bindSession: (
+      id: string,
+      bound: boolean
+    ) => Effect.Effect<Session | undefined>
   }
 >() {}
 
@@ -66,6 +110,55 @@ export const HubLive = Layer.effect(
             return existing.answer
           }
           return yield* Deferred.await(deferred)
+        }),
+
+      registerSession: (input) =>
+        Effect.gen(function* () {
+          const now = Date.now()
+          const session = yield* store.registerSession({
+            id: input.id,
+            agent: input.agent ?? deriveAgent(input),
+            ...(input.project !== undefined ? { project: input.project } : {}),
+            ...(input.model !== undefined ? { model: input.model } : {}),
+            status: "working",
+            bound: false,
+            startedAt: now,
+            lastSeen: now
+          })
+          broadcast({ type: "session.updated", session })
+          return session
+        }),
+
+      updateSessionStatus: (id, status) =>
+        Effect.gen(function* () {
+          let session = yield* store.setSessionStatus(id, status)
+          if (!session) {
+            yield* store.registerSession(quietSession(id))
+            session = yield* store.setSessionStatus(id, status)
+          }
+          if (!session) return yield* Effect.die(`session ${id} vanished`)
+          broadcast({ type: "session.updated", session })
+          return session
+        }),
+
+      endSession: (id) =>
+        Effect.gen(function* () {
+          let session = yield* store.endSession(id)
+          if (!session) {
+            yield* store.registerSession(quietSession(id))
+            session = yield* store.endSession(id)
+          }
+          if (!session) return yield* Effect.die(`session ${id} vanished`)
+          broadcast({ type: "session.updated", session })
+          return session
+        }),
+
+      bindSession: (id, bound) =>
+        Effect.gen(function* () {
+          const session = yield* store.setSessionBound(id, bound)
+          if (!session) return undefined
+          broadcast({ type: "session.updated", session })
+          return session
         }),
 
       answer: (id, text) =>

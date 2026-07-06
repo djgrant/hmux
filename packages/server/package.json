@@ -10,7 +10,7 @@
     "zod": "^4.4.3"
   },
   "scripts": {
-    "dev": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
     "start": "bun run src/index.ts"
   }
 }

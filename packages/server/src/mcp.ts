@@ -41,6 +41,12 @@ const buildServer = (run: Runner) => {
           .string()
           .optional()
           .describe("Optional extra context to help the human answer"),
+        suggestion: z
+          .string()
+          .optional()
+          .describe(
+            "A short suggested answer the human can accept with one key, e.g. 'ok' or 'yes, proceed'"
+          ),
         agent: z.string().optional().describe("Your agent name, if you have one"),
         project: z
           .string()
@@ -48,7 +54,7 @@ const buildServer = (run: Runner) => {
           .describe("The project you are working in (e.g. its directory)")
       }
     },
-    async ({ question, context, agent, project }, extra) => {
+    async ({ question, context, suggestion, agent, project }, extra) => {
       const message: Message = {
         id: crypto.randomUUID(),
         kind: "ask",
@@ -56,6 +62,7 @@ const buildServer = (run: Runner) => {
         ...(project !== undefined ? { project } : {}),
         body: question,
         ...(context !== undefined ? { context } : {}),
+        ...(suggestion !== undefined ? { suggestion } : {}),
         status: "pending",
         createdAt: Date.now()
       }
