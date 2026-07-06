@@ -1,10 +1,19 @@
-import { For } from "solid-js"
-import type { Message } from "@humans/protocol"
-import { formatAge, groups, state } from "../store"
-
-const DIM = "#7a7a7a"
-const FAINT = "#555555"
-const HIGHLIGHT_BG = "#2e2e2e"
+import { For, Show } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
+import type { Message, Session } from "@humans/protocol"
+import { formatAge, groups, presenceOf, roster, selectedIds, state } from "../store"
+import {
+  ACCENT,
+  ATTENTION,
+  BODY,
+  BRIGHT,
+  DIM,
+  FAINT,
+  HIGHLIGHT_BG,
+  HIGHLIGHT_BG_MUTED,
+  LIVE,
+  SIDEBAR_BG,
+} from "../theme"
 
 function snippet(m: Message): string {
   const words = m.body.replace(/\s+/g, " ").trim().split(" ")
@@ -13,14 +22,54 @@ function snippet(m: Message): string {
 }
 
 function Row(props: { message: Message }) {
-  const highlighted = () => props.message.id === state.highlightId
-  const answered = () => props.message.status === "answered"
+  // Shift-selected rows share the highlight background with the highlight row.
+  const highlighted = () =>
+    props.message.id === state.highlightId || selectedIds().includes(props.message.id)
+  const queueFocused = () => state.focus === "queue"
+  const presence = () => presenceOf(props.message)
+  // Zombie ask: pending message whose session is ended/stale — drop a shade.
+  const zombie = () => presence() === "dead"
+  // Focused queue: rows brighten and the highlight/selection is a full-row
+  // block with white text. Composer focused: rows drop a shade, muted bg.
+  const bg = () =>
+    highlighted() ? (queueFocused() ? HIGHLIGHT_BG : HIGHLIGHT_BG_MUTED) : undefined
+  const fg = () => {
+    if (highlighted() && queueFocused()) return BRIGHT
+    if (zombie()) return queueFocused() ? DIM : FAINT
+    return queueFocused() ? BODY : DIM
+  }
+  const metaFg = () => {
+    if (highlighted() && queueFocused()) return BRIGHT
+    if (zombie()) return FAINT
+    return queueFocused() ? DIM : FAINT
+  }
+  // Presence marker column (2 cells, keeps agent names aligned): live agent
+  // gets a green dot, needs-attention the accent, known-dead a faint hollow
+  // marker, no matching session nothing at all.
+  const marker = () => {
+    switch (presence()) {
+      case "live":
+        return { text: "● ", fg: LIVE }
+      case "attention":
+        return { text: "● ", fg: ATTENTION }
+      case "dead":
+        return { text: "○ ", fg: FAINT }
+      default:
+        return { text: "  ", fg: fg() }
+    }
+  }
   return (
-    <box backgroundColor={highlighted() ? HIGHLIGHT_BG : undefined} paddingLeft={1}>
-      <text fg={answered() ? FAINT : undefined}>
-        {answered() ? "✓ " : "  "}
+    // Rows span the full sidebar width so the highlight/selection paint runs
+    // flush from the terminal's left edge to the main pane; only the text
+    // keeps inner padding. paddingLeft 1 + the 2-cell marker column keeps the
+    // agent name at the same column (3) as before markers existed.
+    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2}>
+      {/* wrapMode none + truncate: long rows clip instead of wrapping or
+          stretching the pane. */}
+      <text wrapMode="none" truncate fg={fg()}>
+        <span style={{ fg: marker().fg }}>{marker().text}</span>
         {props.message.agent}
-        <span style={{ fg: answered() ? FAINT : DIM }}>
+        <span style={{ fg: metaFg() }}>
           {"  "}
           {formatAge(props.message.createdAt)}
           {"  "}
@@ -31,17 +80,87 @@ function Row(props: { message: Message }) {
   )
 }
 
-export function Queue() {
+function RosterRow(props: { session: Session }) {
+  const highlighted = () => props.session.id === state.highlightId
+  const queueFocused = () => state.focus === "queue"
+  const bg = () =>
+    highlighted() ? (queueFocused() ? HIGHLIGHT_BG : HIGHLIGHT_BG_MUTED) : undefined
+  const fg = () => {
+    if (highlighted() && queueFocused()) return BRIGHT
+    return queueFocused() ? BODY : DIM
+  }
+  const metaFg = () => {
+    if (highlighted() && queueFocused()) return BRIGHT
+    return queueFocused() ? DIM : FAINT
+  }
+  // Status marker: working green, needs-attention amber, idle faint.
+  const dotFg = () => {
+    if (props.session.status === "needs-attention") return ATTENTION
+    return props.session.status === "working" ? LIVE : FAINT
+  }
+  const statusText = () => {
+    if (props.session.status === "idle") return `idle ${formatAge(props.session.lastSeen)}`
+    return props.session.status === "needs-attention" ? "needs attention" : "working"
+  }
   return (
-    <box flexDirection="column" width="40%" paddingTop={1} paddingRight={2}>
+    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2}>
+      <text wrapMode="none" truncate fg={fg()}>
+        <span style={{ fg: dotFg() }}>{"● "}</span>
+        {props.session.agent}
+        <span style={{ fg: metaFg() }}>
+          {"  "}
+          {statusText()}
+        </span>
+        {props.session.bound ? <span style={{ fg: ACCENT }}>{"  ⁘ bound"}</span> : null}
+      </text>
+    </box>
+  )
+}
+
+export function Queue() {
+  const dimensions = useTerminalDimensions()
+  // Responsive: ~30% of the terminal, clamped to [30, 48] columns. flexShrink 0
+  // plus row truncation keeps the split perfectly stable.
+  const width = () => Math.min(48, Math.max(30, Math.round(dimensions().width * 0.3)))
+  return (
+    // The sidebar is painted edge to edge: it stretches to the full row
+    // height (top to the very last terminal row) from column 0, with NO
+    // horizontal padding on the pane itself — rows own their text padding so
+    // highlight/selection paint reaches both edges. Empty queue: just the
+    // painted slate, no copy.
+    <box
+      flexDirection="column"
+      width={width()}
+      flexShrink={0}
+      flexGrow={0}
+      alignSelf="stretch"
+      backgroundColor={SIDEBAR_BG}
+      paddingTop={1}
+    >
       <For each={groups()}>
         {(group) => (
           <box flexDirection="column" marginBottom={1}>
-            <text fg={FAINT}>{group.project}</text>
+            <box paddingLeft={2} paddingRight={2}>
+              <text wrapMode="none" truncate fg={state.focus === "queue" ? DIM : FAINT}>
+                {group.project}
+              </text>
+            </box>
             <For each={group.messages}>{(m) => <Row message={m} />}</For>
           </box>
         )}
       </For>
+      {/* Roster: live agent sessions, below the message groups. Empty roster
+          renders nothing at all — no header, no copy. */}
+      <Show when={roster().length > 0}>
+        <box flexDirection="column">
+          <box paddingLeft={2} paddingRight={2}>
+            <text wrapMode="none" truncate fg={FAINT}>
+              agents
+            </text>
+          </box>
+          <For each={roster()}>{(s) => <RosterRow session={s} />}</For>
+        </box>
+      </Show>
     </box>
   )
 }

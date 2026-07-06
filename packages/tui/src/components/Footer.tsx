@@ -1,19 +1,25 @@
-import { Show } from "solid-js"
-import { position, state } from "../store"
-
-const DIM = "#7a7a7a"
+import { highlightedSession, position, state } from "../store"
+import { DIM } from "../theme"
 
 export function Footer() {
-  const hint = () =>
-    state.mode === "queue"
-      ? " ↑↓ move · ⏎ compose · esc close"
-      : ` ⏎ send · shift+↑↓ queue · esc skip · ${position().n}/${position().m}`
+  // Minimal, left-aligned; the n/N counter leads. Composer-focused: teach
+  // the queue entry key (shift+↑↓ — the whole navigation surface).
+  // Queue-focused: movement/selection/answer hints; roster rows swap in bind.
+  const hint = () => {
+    const reconnect = state.conn !== "open" ? "reconnecting… · " : ""
+    const keys =
+      state.focus === "queue"
+        ? highlightedSession()
+          ? "↑↓ move · ⏎ bind/unbind"
+          : "↑↓ move · shift+↑↓ select · ⏎ answer"
+        : "shift+↑↓"
+    return `${position().n}/${position().m} · ${reconnect}${keys}`
+  }
   return (
-    <box flexDirection="row" justifyContent="space-between">
+    // flexShrink=0: a long message must squeeze the body scrollbox, never
+    // the footer row.
+    <box flexDirection="row" justifyContent="flex-start" flexShrink={0}>
       <text fg={DIM}>{hint()}</text>
-      <Show when={state.conn !== "open"}>
-        <text fg={DIM}>reconnecting… </text>
-      </Show>
     </box>
   )
 }
