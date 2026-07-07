@@ -69,6 +69,12 @@ export class Hub extends Context.Tag("@humans/server/Hub")<
      * next real session event (or the init frame on reconnect).
      */
     readonly touchSessionByAgent: (agent: string, project?: string) => Effect.Effect<void>
+    /**
+     * Bump last_seen for a session by id (x-humans-session header) and return
+     * it so tool calls can adopt its registered identity. No broadcast — same
+     * tradeoff as touchSessionByAgent.
+     */
+    readonly touchSession: (id: string) => Effect.Effect<Session | undefined>
     /** Mark a session ended and broadcast session.updated. Upserts if unknown. */
     readonly endSession: (id: string) => Effect.Effect<Session>
     /**
@@ -156,6 +162,8 @@ export const HubLive = Layer.effect(
         }),
 
       touchSessionByAgent: (agent, project) => store.touchSessionByAgent(agent, project),
+
+      touchSession: (id) => store.touchSession(id),
 
       endSession: (id) =>
         Effect.gen(function* () {

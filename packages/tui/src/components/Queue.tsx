@@ -38,9 +38,13 @@ function snippet(m: Message): string {
 }
 
 function Row(props: { message: Message }) {
-  // Shift-selected rows share the highlight background with the highlight row.
+  // Shift-selected rows share the highlight background with the highlight
+  // row, and while a merged set is being answered EVERY member row stays
+  // highlighted (muted, since the composer owns focus) so the batch reads.
   const highlighted = () =>
-    props.message.id === state.highlightId || selectedIds().includes(props.message.id)
+    props.message.id === state.highlightId ||
+    selectedIds().includes(props.message.id) ||
+    state.merged.includes(props.message.id)
   const queueFocused = () => state.focus === "queue"
   const presence = () => presenceOf(props.message)
   // Zombie ask: pending message whose session is ended/stale — drop a shade.

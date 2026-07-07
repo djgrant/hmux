@@ -76,30 +76,33 @@ prompted — so bound agents can reach your inbox unattended.
 ## Headless agents: permission prompts in your inbox
 
 Non-interactive (`-p`) runs have no terminal to show permission prompts.
-Route them to your inbox instead with the humans `approve` tool:
+The `humans-run` wrapper ([`src/run.ts`](src/run.ts)) routes them to your
+inbox — with a real roster identity:
 
 ```sh
-claude -p --permission-prompt-tool mcp__humans__approve "run the release script"
+bun run src/run.ts "run the release script" --agent release-bot
+# or, with the package linked: humans-run "run the release script"
 ```
 
-The humans MCP server must be available to that session — the plugin's
-[`.mcp.json`](.mcp.json) provides it when the plugin is enabled; otherwise
-pass it explicitly:
+It registers a session (agent from `--agent` or `<dirname>-<id>`, project =
+cwd), writes a temp `--mcp-config` whose humans server carries the identity
+as headers (`x-humans-agent`/`x-humans-project`/`x-humans-session`), then
+runs
 
 ```sh
-claude -p --permission-prompt-tool mcp__humans__approve \
-  --mcp-config '{"mcpServers":{"humans":{"type":"http","url":"http://localhost:7373/mcp"}}}' \
-  "run the release script"
+claude -p "task" --permission-prompt-tool mcp__humans__approve --mcp-config <tmp>
 ```
 
-Each permission prompt appears in the TUI's **approvals** section and blocks
-the agent until you answer: accept the `allow` ghost (tab, then ⏎) to
-approve; any other reply denies, with your text sent to the agent as the
-reason. Multiple approvals can be shift-selected and allowed in one go. The
-permission tool itself is exempt from permission checks.
+streaming output through, and marks the session ended when claude exits.
+Permissions are NOT skipped — each prompt appears in the TUI's **approvals**
+section and blocks the agent until you answer: accept the `allow` ghost
+(tab, then ⏎) to approve; any other reply denies, with your text sent to the
+agent as the reason. Multiple approvals can be shift-selected and allowed in
+one go. The permission tool itself is exempt from permission checks.
 
-Note: Claude Code invokes the permission tool itself, passing only
-`tool_name`/`input`/`tool_use_id` — so CLI-driven approvals arrive under a
-generated agent id rather than a roster identity. The tool's optional
-`agent`/`project` params exist for SDK `canUseTool`-style integrations that
-can forward one.
+Identity comes from registration (this wrapper, or the plugin's hooks for
+interactive sessions): Claude Code invokes the permission tool itself with
+only `tool_name`/`input`/`tool_use_id`, so the server resolves the caller
+from the `/mcp` request headers instead — tool args, when present, still
+win. Approvals with no resolvable identity are not blocked; they simply
+display under a generated fallback name.

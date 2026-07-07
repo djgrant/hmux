@@ -67,7 +67,41 @@ const startKeepAlive = (
   return () => clearInterval(keepAlive)
 }
 
-const buildServer = (run: Runner) => {
+/**
+ * Caller identity carried on the /mcp request as headers (the humans-run
+ * wrapper and other integrations set them via mcp-config):
+ *
+ *   x-humans-agent    default agent name
+ *   x-humans-project  default project
+ *   x-humans-session  registered session id — resolves to that session's
+ *                     agent/project and bumps its last_seen per tool call
+ *
+ * Tool ARGS always win over headers; headers win over the random fallback.
+ */
+export interface McpIdentity {
+  agent?: string
+  project?: string
+  session?: string
+}
+
+const buildServer = (run: Runner, identity: McpIdentity = {}) => {
+  /**
+   * Resolve the effective default identity for one tool call. The session
+   * header is authoritative when it resolves (registration is the source of
+   * truth for names) and doubles as a liveness touch.
+   */
+  const resolveIdentity = async (): Promise<{ agent?: string; project?: string }> => {
+    if (identity.session !== undefined) {
+      const session = await run(
+        Effect.flatMap(Hub, (hub) => hub.touchSession(identity.session!))
+      )
+      if (session) {
+        return { agent: session.agent, project: session.project ?? identity.project }
+      }
+    }
+    return { agent: identity.agent, project: identity.project }
+  }
+
   // `logging` capability is required for the notifications/message keep-alives
   // that hold the HTTP stream open for token-less clients during a blocked ask.
   const server = new McpServer(
@@ -104,11 +138,14 @@ const buildServer = (run: Runner) => {
       }
     },
     async ({ question, context, suggestion, agent, project }, extra) => {
+      const header = await resolveIdentity()
+      const effectiveAgent = agent ?? header.agent
+      const effectiveProject = project ?? header.project
       const message: Message = {
         id: crypto.randomUUID(),
         kind: "ask",
-        agent: agent ?? randomId("agent"),
-        ...(project !== undefined ? { project } : {}),
+        agent: effectiveAgent ?? randomId("agent"),
+        ...(effectiveProject !== undefined ? { project: effectiveProject } : {}),
         body: question,
         ...(context !== undefined ? { context } : {}),
         ...(suggestion !== undefined ? { suggestion } : {}),
@@ -121,8 +158,8 @@ const buildServer = (run: Runner) => {
         run,
         extra,
         "Waiting for the human to answer...",
-        agent,
-        project
+        effectiveAgent,
+        effectiveProject
       )
       try {
         const answer = await run(Effect.flatMap(Hub, (hub) => hub.awaitAnswer(message.id)))
@@ -154,12 +191,17 @@ const buildServer = (run: Runner) => {
       }
     },
     async ({ tool_name, input, tool_use_id: _toolUseId, agent, project }, extra) => {
+      // Claude Code calls this tool itself with only tool_name/input/
+      // tool_use_id — identity comes from the request headers (humans-run).
+      const header = await resolveIdentity()
+      const effectiveAgent = agent ?? header.agent
+      const effectiveProject = project ?? header.project
       // Human-readable body: what the agent wants to run, input as a fence.
       const message: Message = {
         id: crypto.randomUUID(),
         kind: "approval",
-        agent: agent ?? randomId("agent"),
-        ...(project !== undefined ? { project } : {}),
+        agent: effectiveAgent ?? randomId("agent"),
+        ...(effectiveProject !== undefined ? { project: effectiveProject } : {}),
         body: `wants to run ${tool_name}\n\n\`\`\`json\n${JSON.stringify(input, null, 2)}\n\`\`\``,
         suggestion: "allow",
         status: "pending",
@@ -171,8 +213,8 @@ const buildServer = (run: Runner) => {
         run,
         extra,
         "Waiting for the human to approve...",
-        agent,
-        project
+        effectiveAgent,
+        effectiveProject
       )
       try {
         const answer = await run(Effect.flatMap(Hub, (hub) => hub.awaitAnswer(message.id)))
@@ -208,11 +250,13 @@ const buildServer = (run: Runner) => {
       }
     },
     async ({ message, agent, project }) => {
+      const header = await resolveIdentity()
+      const effectiveProject = project ?? header.project
       const record: Message = {
         id: crypto.randomUUID(),
         kind: "notify",
-        agent: agent ?? randomId("agent"),
-        ...(project !== undefined ? { project } : {}),
+        agent: agent ?? header.agent ?? randomId("agent"),
+        ...(effectiveProject !== undefined ? { project: effectiveProject } : {}),
         body: message,
         status: "pending",
         createdAt: Date.now()
@@ -233,7 +277,14 @@ export const makeMcpHandler = (run: Runner) => async (req: Request): Promise<Res
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined
   })
-  const server = buildServer(run)
+  // Per-request server: the caller's identity headers close over the tool
+  // handlers for exactly this request.
+  const identity: McpIdentity = {
+    agent: req.headers.get("x-humans-agent") ?? undefined,
+    project: req.headers.get("x-humans-project") ?? undefined,
+    session: req.headers.get("x-humans-session") ?? undefined
+  }
+  const server = buildServer(run, identity)
   await server.connect(transport)
   return transport.handleRequest(req)
 }

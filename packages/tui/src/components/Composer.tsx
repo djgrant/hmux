@@ -24,6 +24,13 @@ export function Composer(props: {
   focused: boolean
   /** Agent-provided suggested answer; the ghost defaults to "ok" without one. */
   suggestion?: string
+  /**
+   * Merged composer only: returns the members' current drafts concatenated.
+   * When set, ctrl+u replaces the composer text with it — DELIBERATELY
+   * shadowing the textarea's default ctrl+u (delete-to-line-start), which
+   * stays untouched in every non-merged composer.
+   */
+  regenerate?: () => string
   onSend: (text: string) => void
 }) {
   const ghost = () => props.suggestion ?? "ok"
@@ -115,6 +122,17 @@ export function Composer(props: {
                   // the queue mirrors back).
                   key.preventDefault()
                   focusQueue(0)
+                } else if (props.regenerate && key.ctrl && key.name === "u") {
+                  // ctrl+u in the MERGED composer: re-copy the members'
+                  // current drafts (they were copied, not consumed, at merge
+                  // time). preventDefault keeps the textarea's default
+                  // ctrl+u (delete-to-line-start) from also firing.
+                  key.preventDefault()
+                  const text = props.regenerate()
+                  ref?.setText(text)
+                  ref?.gotoBufferEnd()
+                  setDraft(id, { text, cursor: text.length })
+                  setComposerEmpty(text.length === 0)
                 } else if (key.name === "tab") {
                   // Tab's only job: accept the ghost on an empty composer.
                   // Always preventDefault so it can't leak into the textarea

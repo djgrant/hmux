@@ -100,6 +100,11 @@ export class Store extends Context.Tag("@humans/server/Store")<
       agent: string,
       project?: string
     ) => Effect.Effect<void>
+    /**
+     * Bumps last_seen for a session by id and returns it (undefined when
+     * unknown). Used by MCP tool calls carrying an x-humans-session header.
+     */
+    readonly touchSession: (id: string) => Effect.Effect<Session | undefined>
     readonly setSessionBound: (
       id: string,
       bound: boolean
@@ -185,6 +190,7 @@ export const StoreLive = Layer.sync(Store, () => {
   )
   // Best live match for an agent name: exact agent + project first, then
   // exact agent (most recently seen wins among ties).
+  const touchById = db.prepare("UPDATE sessions SET last_seen = $lastSeen WHERE id = $id")
   const touchByAgent = db.prepare(`
     UPDATE sessions SET last_seen = $lastSeen WHERE id = (
       SELECT id FROM sessions
@@ -284,6 +290,12 @@ export const StoreLive = Layer.sync(Store, () => {
           $project: project ?? null,
           $lastSeen: Date.now()
         })
+      }),
+
+    touchSession: (id) =>
+      Effect.sync(() => {
+        touchById.run({ $id: id, $lastSeen: Date.now() })
+        return getSession(id)
       }),
 
     setSessionBound: (id, bound) =>

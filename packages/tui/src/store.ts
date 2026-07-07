@@ -438,18 +438,18 @@ export function commitHighlight() {
   if (highlightedSession()) return
   const selection = selectedIds()
   if (selection.length > 1) {
-    // The merged composer INHERITS the members' existing drafts (newline-
-    // separated, cursor at end) and CONSUMES them — otherwise an individual
-    // draft (e.g. "asd" typed before merging) survives the merge invisibly
-    // and fires the next time that message becomes current alone.
-    const inherited = selection
-      .map((id) => drafts.get(id)?.text ?? "")
-      .filter((text) => text.trim().length > 0)
-      .join("\n")
-    for (const id of selection) deleteDraft(id)
+    // The merged composer SEEDS from the members' drafts (newline-separated,
+    // cursor at end) but COPIES rather than consumes: backing out of an
+    // accidental merge loses nothing — each member keeps its own draft.
+    // Re-entering an existing merge keeps the merged draft (it wins by
+    // default); ctrl+u in the merged composer re-copies from the members.
+    // Member drafts are only cleaned up when the merged answer is SENT.
     const mergedKey = selection.join("+")
-    if (inherited.length > 0) setDraft(mergedKey, { text: inherited, cursor: inherited.length })
-    else deleteDraft(mergedKey)
+    if (!drafts.has(mergedKey)) {
+      const inherited = mergedDraftFor(selection)
+      if (inherited.length > 0)
+        setDraft(mergedKey, { text: inherited, cursor: inherited.length })
+    }
     setState({
       merged: selection,
       currentId: selection[0]!,
@@ -469,4 +469,17 @@ export function commitHighlight() {
 /** Leave merged mode (after the merged answer is sent). */
 export function clearMerged() {
   setState("merged", [])
+}
+
+/** The members' current drafts concatenated — the merged composer's seed. */
+function mergedDraftFor(ids: string[]): string {
+  return ids
+    .map((id) => drafts.get(id)?.text ?? "")
+    .filter((text) => text.trim().length > 0)
+    .join("\n")
+}
+
+/** ctrl+u in the merged composer: re-copy the members' CURRENT drafts. */
+export function mergedDraftFromMembers(): string {
+  return mergedDraftFor(state.merged)
 }

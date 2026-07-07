@@ -12,7 +12,9 @@ export function Footer() {
         ? highlightedSession()
           ? "↑↓ move · ⏎ bind/unbind"
           : "↑↓ move · shift+↑↓ select · ⏎ answer"
-        : "shift+↑↓"
+        : state.merged.length > 1
+          ? "shift+↑↓ · ctrl+u update from drafts"
+          : "shift+↑↓"
     return `${position().n}/${position().m} · ${reconnect}${keys}`
   }
   return (

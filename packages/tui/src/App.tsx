@@ -14,6 +14,7 @@ import {
   highlightedSession,
   incoming,
   markAnswered,
+  mergedDraftFromMembers,
   mergedMessages,
   moveHighlight,
   showToast,
@@ -328,6 +329,9 @@ export function App(props: {
             suggestion={
               mergedMessages().every((m) => m.kind === "approval") ? "allow" : undefined
             }
+            // ctrl+u: re-copy the members' current drafts (merging copies,
+            // never consumes them).
+            regenerate={mergedDraftFromMembers}
             onSend={handleMergedSend}
           />
         </Show>

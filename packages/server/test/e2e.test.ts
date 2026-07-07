@@ -46,9 +46,14 @@ afterAll(() => {
   }
 })
 
-const connectMcp = async () => {
+const connectMcp = async (headers?: Record<string, string>) => {
   const client = new Client({ name: "e2e", version: "0.0.0" })
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`)))
+  await client.connect(
+    new StreamableHTTPClientTransport(
+      new URL(`${BASE}/mcp`),
+      headers ? { requestInit: { headers } } : undefined
+    )
+  )
   return client
 }
 
@@ -175,6 +180,69 @@ test("approve blocks, then returns the permission-result JSON (allow and deny)",
   })
 
   await client.close()
+  ws.close()
+}, 15_000)
+
+test("identity headers default agent/project; args win; session header resolves + touches", async () => {
+  const { ws, events, open } = connectWs()
+  await open
+
+  // Header identity as the default: approve without agent/project args
+  // (exactly how Claude Code's own permission-tool invocation arrives).
+  const c1 = await connectMcp({ "x-humans-agent": "hdr-bot", "x-humans-project": "hdr-proj" })
+  const approveCall = c1.callTool({
+    name: "approve",
+    arguments: { tool_name: "Bash", input: { command: "make" } }
+  })
+  const approval = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.kind === "approval" && e.message.agent === "hdr-bot"
+    )
+  )
+  expect(approval.message.project).toBe("hdr-proj")
+  ws.send(JSON.stringify({ type: "answer", id: approval.message.id, text: "allow" }))
+  await approveCall
+
+  // Tool args always win over headers.
+  await c1.callTool({
+    name: "notify",
+    arguments: { message: "args win", agent: "arg-bot", project: "arg-proj" }
+  })
+  const argsWin = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.body === "args win"
+    )
+  )
+  expect(argsWin.message.agent).toBe("arg-bot")
+  expect(argsWin.message.project).toBe("arg-proj")
+  await c1.close()
+
+  // Session header: the registered identity is authoritative (beats the
+  // agent header) and each tool call bumps the session's lastSeen.
+  const regRes = await fetch(`${BASE}/sessions/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "hdr-sess", agent: "reg-bot", project: "/reg/proj" })
+  })
+  const before = ((await regRes.json()) as { lastSeen: number }).lastSeen
+  await Bun.sleep(5)
+  const c2 = await connectMcp({ "x-humans-session": "hdr-sess", "x-humans-agent": "ignored-bot" })
+  await c2.callTool({ name: "notify", arguments: { message: "sess notify" } })
+  const sessMsg = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.body === "sess notify"
+    )
+  )
+  expect(sessMsg.message.agent).toBe("reg-bot")
+  expect(sessMsg.message.project).toBe("/reg/proj")
+  const touched = (await (await fetch(`${BASE}/sessions/hdr-sess`)).json()) as {
+    lastSeen: number
+  }
+  expect(touched.lastSeen).toBeGreaterThan(before)
+  await c2.close()
   ws.close()
 }, 15_000)
 
