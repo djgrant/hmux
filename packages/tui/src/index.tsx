@@ -10,6 +10,20 @@ import { App } from "./App"
 import { MAIN_BG } from "./theme"
 import { applyTmuxNotificationOverride } from "./notify"
 
+// The TUI is full-screen and sizes itself from STDOUT: when stdout is a pipe
+// (log-piping dev runners, `| tee`, CI), OpenTUI silently falls back to
+// stdout.columns || 80 and never receives resize events — the UI renders
+// clamped to a corner of the terminal and stays that way (round 21, live
+// diagnosis: a dev runner spawned us with piped stdout while stdin was still
+// the tty). Fail loudly instead of rendering a broken UI.
+if (!process.stdout.isTTY) {
+  console.error(
+    "humans tui: stdout is not a terminal — refusing to render a clamped UI.\n" +
+      "Run the TUI directly in a terminal pane (not through a log-piping dev runner).",
+  )
+  process.exit(1)
+}
+
 // Inside tmux OpenTUI can't identify the outer terminal (TERM/TERM_PROGRAM
 // read "tmux") and detects no notification protocol; detect it from surviving
 // env fingerprints and force the protocol. Must run before render() creates
