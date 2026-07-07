@@ -329,9 +329,51 @@ export function setConn(conn: ConnState) {
   setState("conn", conn)
 }
 
+// --- Ingress sanitization ----------------------------------------------------
+//
+// Agent-supplied text is UNTRUSTED terminal-wise: agents routinely paste
+// ANSI-colored build output into ask/notify bodies. The renderer copies text
+// into cells and emits those bytes RAW in the frame stream, so an embedded
+// ESC can merge with adjacent output into live escape sequences (strewn
+// text, screen clears); the same text also reaches OSC egress (terminal
+// title). Strip every control character except newline at the ONE choke
+// point where server data enters the store, so nothing downstream has to
+// care. (\t goes too — cell drawing has no tab semantics.)
+const CONTROL_CHARS_RE = /[\x00-\x09\x0b-\x1f\x7f-\x9f]/g
+
+/** Strip terminal control characters (keeps \n). */
+export function stripControls(text: string): string {
+  return text.replace(CONTROL_CHARS_RE, "")
+}
+
+const sanitizeOptional = (text: string | undefined): string | undefined =>
+  text === undefined ? undefined : stripControls(text)
+
+function sanitizeMessage(m: Message): Message {
+  return {
+    ...m,
+    agent: stripControls(m.agent),
+    project: sanitizeOptional(m.project),
+    body: stripControls(m.body),
+    context: sanitizeOptional(m.context),
+    suggestion: sanitizeOptional(m.suggestion),
+    answer: sanitizeOptional(m.answer),
+  }
+}
+
+function sanitizeSession(s: Session): Session {
+  return {
+    ...s,
+    agent: stripControls(s.agent),
+    project: sanitizeOptional(s.project),
+    model: sanitizeOptional(s.model),
+    detail: sanitizeOptional(s.detail),
+  }
+}
+
 export function applyInit(messages: Message[], sessions: Session[] = []) {
-  setState("messages", messages)
-  setState("sessions", sessions)
+  setState("messages", messages.map(sanitizeMessage))
+  setState("sessions", sessions.map(sanitizeSession))
   if (!state.currentId || !state.messages.some((m) => m.id === state.currentId && m.status === "pending")) {
     setState("currentId", firstPendingId())
   }
@@ -343,15 +385,16 @@ export function applyInit(messages: Message[], sessions: Session[] = []) {
 
 /** session.updated: upsert by id (whole-object replace, no field merge). */
 export function upsertSession(session: Session) {
+  const clean = sanitizeSession(session)
   setState("sessions", (list) => {
-    const idx = list.findIndex((s) => s.id === session.id)
-    return idx === -1 ? [...list, session] : list.map((s, i) => (i === idx ? session : s))
+    const idx = list.findIndex((s) => s.id === clean.id)
+    return idx === -1 ? [...list, clean] : list.map((s, i) => (i === idx ? clean : s))
   })
 }
 
 export function addMessage(message: Message) {
   if (state.messages.some((m) => m.id === message.id)) return
-  setState("messages", state.messages.length, message)
+  setState("messages", state.messages.length, sanitizeMessage(message))
   if (!currentMessage() || currentMessage()!.status !== "pending") {
     setState("currentId", firstPendingId())
   }

@@ -52,6 +52,14 @@ Bun.serve({
       upsertSession((await req.json()) as Session)
       return new Response("ok", { status: 200 })
     }
+    // Manual/PTY testing affordance: POST a Message JSON to broadcast it as
+    // message.new (exercises the full incoming-message side-effect path).
+    if (pathname === "/message" && req.method === "POST") {
+      const message = (await req.json()) as Message
+      messages.push(message)
+      broadcast({ type: "message.new", message })
+      return new Response("ok", { status: 200 })
+    }
     return new Response("stub", { status: 200 })
   },
   websocket: {

@@ -19,6 +19,7 @@ import {
   moveHighlight,
   showToast,
   state,
+  stripControls,
   unread,
 } from "./store"
 import { AnsweredView, MessageView } from "./components/MessageView"
@@ -87,11 +88,15 @@ export function App(props: {
 
   // Terminal tab title follows the displayed message (first line of the
   // highlighted/current message, truncated); neutral "humans" when empty.
-  // setTerminalTitle is OpenTUI's sanctioned OSC-title API — the renderer
-  // owns stdout, so we never write escapes ourselves.
+  // setTerminalTitle is OpenTUI's sanctioned OSC-title API — but it emits
+  // the payload into \x1b]0;…\x07 UNSANITIZED, and an embedded ESC aborts
+  // the OSC mid-parse: the terminal then executes/prints the rest of the
+  // title LITERALLY at the cursor (i.e. inside the composer). Ingress
+  // sanitization already strips controls from bodies; stripControls here is
+  // belt-and-braces for this escape-sequence egress specifically.
   createEffect(() => {
     const msg = activeMessage()
-    const firstLine = msg?.body.split("\n")[0]?.trim() ?? ""
+    const firstLine = stripControls(msg?.body.split("\n")[0] ?? "").trim()
     renderer.setTerminalTitle(firstLine.length > 0 ? firstLine.slice(0, 60) : "humans")
   })
 

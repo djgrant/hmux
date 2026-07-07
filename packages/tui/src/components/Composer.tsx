@@ -38,7 +38,16 @@ export function Composer(props: {
     <Show when={props.messageId} keyed>
       {(id) => {
         let ref: TextareaRenderable | undefined
-        const empty = () => (ref?.plainText ?? drafts.get(id)?.text ?? "").length === 0
+        // plainText throws once the underlying EditBuffer is destroyed (a
+        // message can land mid-teardown); fall back to the draft then.
+        const bufferText = (): string | undefined => {
+          try {
+            return ref?.plainText
+          } catch {
+            return undefined
+          }
+        }
+        const empty = () => (bufferText() ?? drafts.get(id)?.text ?? "").length === 0
         const saveDraft = () => {
           if (ref) setDraft(id, { text: ref.plainText, cursor: ref.cursorOffset })
         }
