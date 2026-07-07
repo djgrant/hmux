@@ -231,14 +231,18 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hook_event_name: "Notification",
     message: "Claude needs your permission to use Bash"
   })
-  expect((await getSession(id)).status).toBe("needs-attention")
+  const attention = await getSession(id)
+  expect(attention.status).toBe("needs-attention")
+  expect(attention.detail).toBe("Claude needs your permission to use Bash") // roster label
   await runHook({
     session_id: id,
     cwd,
     hook_event_name: "Notification",
     message: "Claude is waiting for your input"
   })
-  expect((await getSession(id)).status).toBe("idle")
+  const idledByNotification = await getSession(id)
+  expect(idledByNotification.status).toBe("idle")
+  expect(idledByNotification.detail).toBeUndefined() // label cleared with the transition
   await runHook({ session_id: id, cwd, hook_event_name: "Notification", message: "Auth success" })
   expect((await getSession(id)).status).toBe("idle") // untouched
   await runHook({ session_id: id, cwd, hook_event_name: "Notification" }) // no message field
@@ -314,7 +318,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   expect((await getSession(id)).endedAt).toBeGreaterThan(0)
 }, 20_000)
 
-test("needs-attention transition publishes ONE notify message", async () => {
+test("needs-attention is a roster label: detail stored, cleared, never a queue message", async () => {
   const { ws, events, open } = connectWs()
   await open
   await fetch(`${BASE}/sessions/register`, {
@@ -322,43 +326,37 @@ test("needs-attention transition publishes ONE notify message", async () => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: "na-1", agent: "na-bot", project: "/tmp/na-project" })
   })
-  const naMessages = () =>
-    events.filter(
-      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
-        e.type === "message.new" && e.message.agent === "na-bot"
-    )
-  const setStatus = (status: string) =>
+  const setStatus = (status: string, detail?: string) =>
     fetch(`${BASE}/sessions/na-1/status`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, ...(detail !== undefined ? { detail } : {}) })
     })
 
-  // Transition working -> needs-attention: one notify lands in the queue.
-  await setStatus("needs-attention")
-  const first = await waitFor(() => naMessages()[0])
-  expect(first.message.kind).toBe("notify")
-  expect(first.message.project).toBe("/tmp/na-project")
-  expect(first.message.body).toContain("waiting on you in the terminal")
-  expect(first.message.status).toBe("pending")
+  // needs-attention stores the reason and broadcasts it on the session.
+  await setStatus("needs-attention", "Claude needs your permission to use Bash")
+  const blocked = await getSession("na-1")
+  expect(blocked.status).toBe("needs-attention")
+  expect(blocked.detail).toBe("Claude needs your permission to use Bash")
+  const updated = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "session.updated" }> =>
+        e.type === "session.updated" && e.session.id === "na-1" && e.session.detail !== undefined
+    )
+  )
+  expect(updated.session.detail).toContain("permission")
 
-  // Repeat needs-attention posts: NO second message.
-  await setStatus("needs-attention")
-  await Bun.sleep(300)
-  expect(naMessages().length).toBe(1)
-
-  // Recover, then a fresh transition fires again.
+  // Transitioning away clears the label.
   await setStatus("working")
-  await setStatus("needs-attention")
-  await waitFor(() => (naMessages().length === 2 ? true : undefined))
+  expect((await getSession("na-1")).detail).toBeUndefined()
 
-  // idle → needs-attention never publishes: genuine permission prompts
-  // happen mid-turn (working); a flip from idle is a stray idle-style
-  // notification that slipped through the hook-side filter.
-  await setStatus("idle")
+  // needs-attention without a detail: label absent, still no crash.
   await setStatus("needs-attention")
+  expect((await getSession("na-1")).detail).toBeUndefined()
+
+  // Blocked sessions NEVER publish queue messages (round-15 behaviour removed).
   await Bun.sleep(300)
-  expect(naMessages().length).toBe(2)
+  expect(events.some((e) => e.type === "message.new" && e.message.agent === "na-bot")).toBe(false)
   ws.close()
 }, 15_000)
 

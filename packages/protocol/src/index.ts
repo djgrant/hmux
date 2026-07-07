@@ -1,4 +1,4 @@
-export type MessageKind = "ask" | "notify"
+export type MessageKind = "ask" | "notify" | "approval"
 export type MessageStatus = "pending" | "answered"
 
 export interface Message {
@@ -23,6 +23,7 @@ export interface Session {
   project?: string // e.g. the session's cwd
   model?: string
   status: SessionStatus
+  detail?: string // short status reason, e.g. the permission-prompt text while blocked
   bound: boolean // human has bound this session to their inbox
   startedAt: number // epoch ms
   lastSeen: number // epoch ms; staleness is computed by consumers
@@ -51,7 +52,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isMessageKind(value: unknown): value is MessageKind {
-  return value === "ask" || value === "notify"
+  return value === "ask" || value === "notify" || value === "approval"
 }
 
 export function isMessageStatus(value: unknown): value is MessageStatus {
@@ -87,6 +88,7 @@ export function isSession(value: unknown): value is Session {
     (value.project === undefined || typeof value.project === "string") &&
     (value.model === undefined || typeof value.model === "string") &&
     isSessionStatus(value.status) &&
+    (value.detail === undefined || typeof value.detail === "string") &&
     typeof value.bound === "boolean" &&
     typeof value.startedAt === "number" &&
     typeof value.lastSeen === "number" &&

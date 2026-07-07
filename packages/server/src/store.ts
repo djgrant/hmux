@@ -38,6 +38,7 @@ interface SessionRow {
   project: string | null
   model: string | null
   status: string
+  detail: string | null
   bound: number
   started_at: number
   last_seen: number
@@ -50,6 +51,7 @@ const rowToSession = (row: SessionRow): Session => ({
   ...(row.project !== null ? { project: row.project } : {}),
   ...(row.model !== null ? { model: row.model } : {}),
   status: row.status as Session["status"],
+  ...(row.detail !== null && row.detail !== undefined ? { detail: row.detail } : {}),
   bound: row.bound === 1,
   startedAt: row.started_at,
   lastSeen: row.last_seen,
@@ -77,11 +79,27 @@ export class Store extends Context.Tag("@humans/server/Store")<
     readonly registerSession: (session: Session) => Effect.Effect<Session>
     readonly getSession: (id: string) => Effect.Effect<Session | undefined>
     readonly listSessions: Effect.Effect<Session[]>
-    /** Updates status and bumps last_seen. Returns undefined for unknown sessions. */
+    /**
+     * Updates status and bumps last_seen. `detail` (the status reason, e.g.
+     * the permission-prompt text) is stored only with needs-attention and
+     * cleared on every other status — transitioning away wipes the label.
+     * Returns undefined for unknown sessions.
+     */
     readonly setSessionStatus: (
       id: string,
-      status: SessionStatus
+      status: SessionStatus,
+      detail?: string
     ) => Effect.Effect<Session | undefined>
+    /**
+     * Bumps last_seen for the live session best matching an agent name
+     * (exact agent + project preferred, then exact agent). Silent no-op when
+     * nothing matches. Used by blocking MCP tools so a session waiting on
+     * the human doesn't drift stale in the roster.
+     */
+    readonly touchSessionByAgent: (
+      agent: string,
+      project?: string
+    ) => Effect.Effect<void>
     readonly setSessionBound: (
       id: string,
       bound: boolean
@@ -122,12 +140,19 @@ export const StoreLive = Layer.sync(Store, () => {
       project TEXT,
       model TEXT,
       status TEXT NOT NULL,
+      detail TEXT,
       bound INTEGER NOT NULL DEFAULT 0,
       started_at INTEGER NOT NULL,
       last_seen INTEGER NOT NULL,
       ended_at INTEGER
     )
   `)
+  // Migration for pre-existing databases created before the detail column.
+  try {
+    db.run("ALTER TABLE sessions ADD COLUMN detail TEXT")
+  } catch {
+    // Column already exists.
+  }
 
   const insert = db.prepare(`
     INSERT INTO messages (id, kind, agent, project, body, context, suggestion, status, answer, created_at, answered_at)
@@ -156,8 +181,18 @@ export const StoreLive = Layer.sync(Store, () => {
   const selectSession = db.prepare("SELECT * FROM sessions WHERE id = $id")
   const selectSessions = db.prepare("SELECT * FROM sessions ORDER BY started_at ASC")
   const updateStatus = db.prepare(
-    "UPDATE sessions SET status = $status, last_seen = $lastSeen WHERE id = $id"
+    "UPDATE sessions SET status = $status, detail = $detail, last_seen = $lastSeen WHERE id = $id"
   )
+  // Best live match for an agent name: exact agent + project first, then
+  // exact agent (most recently seen wins among ties).
+  const touchByAgent = db.prepare(`
+    UPDATE sessions SET last_seen = $lastSeen WHERE id = (
+      SELECT id FROM sessions
+      WHERE agent = $agent AND ended_at IS NULL
+      ORDER BY (CASE WHEN project IS $project THEN 0 ELSE 1 END), last_seen DESC
+      LIMIT 1
+    )
+  `)
   const updateBound = db.prepare("UPDATE sessions SET bound = $bound WHERE id = $id")
   const markEnded = db.prepare(
     "UPDATE sessions SET ended_at = $endedAt, last_seen = $lastSeen WHERE id = $id"
@@ -229,10 +264,26 @@ export const StoreLive = Layer.sync(Store, () => {
       (selectSessions.all() as SessionRow[]).map(rowToSession)
     ),
 
-    setSessionStatus: (id, status) =>
+    setSessionStatus: (id, status, detail) =>
       Effect.sync(() => {
-        updateStatus.run({ $id: id, $status: status, $lastSeen: Date.now() })
+        updateStatus.run({
+          $id: id,
+          $status: status,
+          // The reason label only makes sense while blocked; any other
+          // status wipes it so stale reasons never linger in the roster.
+          $detail: status === "needs-attention" ? (detail ?? null) : null,
+          $lastSeen: Date.now()
+        })
         return getSession(id)
+      }),
+
+    touchSessionByAgent: (agent, project) =>
+      Effect.sync(() => {
+        touchByAgent.run({
+          $agent: agent,
+          $project: project ?? null,
+          $lastSeen: Date.now()
+        })
       }),
 
     setSessionBound: (id, bound) =>

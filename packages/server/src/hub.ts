@@ -52,12 +52,23 @@ export class Hub extends Context.Tag("@humans/server/Hub")<
     /**
      * Update a session's status (bumping last_seen) and broadcast
      * session.updated. Unknown sessions are quietly upsert-registered first —
-     * hooks can fire in any order for resumed sessions.
+     * hooks can fire in any order for resumed sessions. `detail` is the
+     * status reason (stored with needs-attention only; see Store).
      */
     readonly updateSessionStatus: (
       id: string,
-      status: SessionStatus
+      status: SessionStatus,
+      detail?: string
     ) => Effect.Effect<Session>
+    /**
+     * Bump last_seen for the live session matching an agent name (exact
+     * agent+project preferred). Deliberately does NOT broadcast: this fires
+     * on every keep-alive tick of a blocked ask/approve, and spamming
+     * session.updated every ~20s buys nothing — the TUI computes staleness
+     * from its own clock, so the fresher last_seen reaches clients with the
+     * next real session event (or the init frame on reconnect).
+     */
+    readonly touchSessionByAgent: (agent: string, project?: string) => Effect.Effect<void>
     /** Mark a session ended and broadcast session.updated. Upserts if unknown. */
     readonly endSession: (id: string) => Effect.Effect<Session>
     /**
@@ -87,19 +98,16 @@ export const HubLive = Layer.effect(
         )
       })
 
-    // Shared by publishNew and the needs-attention transition below.
-    const publishNewMessage = (message: Message) =>
-      store.create(message).pipe(
-        Effect.tap(() => Effect.sync(() => broadcast({ type: "message.new", message })))
-      )
-
     return Hub.of({
       setBroadcast: (fn) =>
         Effect.sync(() => {
           broadcast = fn
         }),
 
-      publishNew: publishNewMessage,
+      publishNew: (message) =>
+        store.create(message).pipe(
+          Effect.tap(() => Effect.sync(() => broadcast({ type: "message.new", message })))
+        ),
 
       awaitAnswer: (id) =>
         Effect.gen(function* () {
@@ -132,39 +140,22 @@ export const HubLive = Layer.effect(
           return session
         }),
 
-      updateSessionStatus: (id, status) =>
+      updateSessionStatus: (id, status, detail) =>
         Effect.gen(function* () {
-          const before = yield* store.getSession(id)
-          let session = yield* store.setSessionStatus(id, status)
+          let session = yield* store.setSessionStatus(id, status, detail)
           if (!session) {
             yield* store.registerSession(quietSession(id))
-            session = yield* store.setSessionStatus(id, status)
+            session = yield* store.setSessionStatus(id, status, detail)
           }
           if (!session) return yield* Effect.die(`session ${id} vanished`)
+          // A blocked session surfaces as a roster label (status + detail),
+          // never as a queue message — the human can't action a terminal
+          // permission prompt from the inbox.
           broadcast({ type: "session.updated", session })
-          // A session newly waiting on the human (permission prompt) surfaces
-          // in the inbox like any other notify. Only on the TRANSITION to
-          // needs-attention — repeat posts stay silent — and never FROM idle:
-          // genuine permission prompts happen mid-turn (working), while an
-          // idle→needs-attention flip is almost certainly a stray idle-style
-          // notification that slipped through the hook-side filter.
-          if (
-            status === "needs-attention" &&
-            before?.status !== "needs-attention" &&
-            before?.status !== "idle"
-          ) {
-            yield* publishNewMessage({
-              id: crypto.randomUUID(),
-              kind: "notify",
-              agent: session.agent,
-              ...(session.project !== undefined ? { project: session.project } : {}),
-              body: "waiting on you in the terminal (permission prompt)",
-              status: "pending",
-              createdAt: Date.now()
-            })
-          }
           return session
         }),
+
+      touchSessionByAgent: (agent, project) => store.touchSessionByAgent(agent, project),
 
       endSession: (id) =>
         Effect.gen(function* () {

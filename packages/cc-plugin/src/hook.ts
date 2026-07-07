@@ -205,12 +205,16 @@ const main = async () => {
       // Notification fires for MORE than permission prompts — notably the
       // "Claude is waiting for your input" idle notification (~60s after
       // the session idles) and auth/elicitation events. Only a genuine
-      // attention case may set needs-attention (the server publishes an
-      // inbox notify on that transition); the idle notification maps to
-      // idle, and unknown notification kinds leave the status untouched.
+      // attention case may set needs-attention (it renders as a "blocked"
+      // roster label with the reason); the idle notification maps to idle,
+      // and unknown notification kinds leave the status untouched.
       const text = typeof input.message === "string" ? input.message : ""
       if (/permission/i.test(text)) {
-        await post(`/sessions/${encoded}/status`, { status: "needs-attention" })
+        // The notification text rides along as the roster "blocked" label.
+        await post(`/sessions/${encoded}/status`, {
+          status: "needs-attention",
+          detail: text.trim().slice(0, 200)
+        })
       } else if (/waiting for your input/i.test(text)) {
         await post(`/sessions/${encoded}/status`, { status: "idle" })
       }

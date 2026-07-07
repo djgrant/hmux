@@ -282,10 +282,23 @@ export function App(props: {
                         <text fg={DIM}>fyi — tab then ⏎ to dismiss</text>
                       </box>
                     </Show>
+                    {/* Approvals: tab+⏎ accepts the "allow" ghost; any typed
+                        text becomes the denial reason the agent sees. */}
+                    <Show when={msg.kind === "approval"}>
+                      <box flexShrink={0}>
+                        <text fg={DIM}>approval — tab then ⏎ to allow · type a reason to deny</text>
+                      </box>
+                    </Show>
                     <Composer
                       messageId={msg.id}
                       focused={state.focus === "composer"}
-                      suggestion={msg.kind === "notify" ? (msg.suggestion ?? "dismiss") : msg.suggestion}
+                      suggestion={
+                        msg.kind === "notify"
+                          ? (msg.suggestion ?? "dismiss")
+                          : msg.kind === "approval"
+                            ? (msg.suggestion ?? "allow")
+                            : msg.suggestion
+                      }
                       onSend={handleSend}
                     />
                   </Show>
@@ -310,6 +323,11 @@ export function App(props: {
           <Composer
             messageId={mergedMessages().map((m) => m.id).join("+")}
             focused={state.focus === "composer"}
+            // Batch approvals (selections never mix kinds): the ghost is
+            // "allow" so tab+⏎ approves every selected request at once.
+            suggestion={
+              mergedMessages().every((m) => m.kind === "approval") ? "allow" : undefined
+            }
             onSend={handleMergedSend}
           />
         </Show>

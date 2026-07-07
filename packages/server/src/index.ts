@@ -31,7 +31,7 @@ const json = (body: unknown, status = 200) =>
  * no auth):
  *
  *   POST /sessions/register    {id, agent?, project?, model?}
- *   POST /sessions/:id/status  {status}
+ *   POST /sessions/:id/status  {status, detail?}
  *   POST /sessions/:id/end
  *   GET  /sessions/:id
  *
@@ -78,8 +78,10 @@ const handleSessions = async (req: Request, url: URL): Promise<Response | undefi
     if (!isSessionStatus(status)) {
       return json({ error: "status must be working | idle | needs-attention" }, 400)
     }
+    const rawDetail = (body as Record<string, unknown>)?.detail
+    const detail = typeof rawDetail === "string" && rawDetail.length > 0 ? rawDetail : undefined
     const session = await run(
-      Effect.flatMap(Hub, (hub) => hub.updateSessionStatus(statusMatch[1]!, status))
+      Effect.flatMap(Hub, (hub) => hub.updateSessionStatus(statusMatch[1]!, status, detail))
     )
     return json(session)
   }

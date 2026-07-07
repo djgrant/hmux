@@ -15,7 +15,13 @@ let proc: Bun.Subprocess
 
 beforeAll(async () => {
   proc = Bun.spawn(["bun", "run", `${import.meta.dir}/../src/index.ts`], {
-    env: { ...process.env, HUMANS_PORT: String(PORT), HUMANS_DB: DB },
+    env: {
+      ...process.env,
+      HUMANS_PORT: String(PORT),
+      HUMANS_DB: DB,
+      // Fast keep-alive ticks so the blocked-tool session-touch is testable.
+      HUMANS_PROGRESS_INTERVAL_MS: "100"
+    },
     stdout: "ignore",
     stderr: "inherit"
   })
@@ -114,6 +120,94 @@ test("ask blocks until answered via WS, then returns the answer", async () => {
   await Bun.sleep(300)
   expect(events.filter((e) => e.type === "message.answered").length).toBe(before)
 
+  await client.close()
+  ws.close()
+}, 15_000)
+
+test("approve blocks, then returns the permission-result JSON (allow and deny)", async () => {
+  const { ws, events, open } = connectWs()
+  await open
+  const client = await connectMcp()
+
+  // Allow path: "allow" answers with behavior=allow + the ORIGINAL input.
+  const allowCall = client.callTool({
+    name: "approve",
+    arguments: {
+      tool_name: "Bash",
+      input: { command: "rm -rf dist" },
+      tool_use_id: "tu-1",
+      agent: "e2e-agent",
+      project: "humans.sh"
+    }
+  })
+  const created = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.kind === "approval"
+    )
+  )
+  expect(created.message.body).toContain("wants to run Bash")
+  expect(created.message.body).toContain("rm -rf dist")
+  expect(created.message.suggestion).toBe("allow") // the TUI ghost
+  ws.send(JSON.stringify({ type: "answer", id: created.message.id, text: "allow" }))
+  const allowResult = (await allowCall) as { content: Array<{ type: string; text: string }> }
+  expect(JSON.parse(allowResult.content[0]!.text)).toEqual({
+    behavior: "allow",
+    updatedInput: { command: "rm -rf dist" }
+  })
+
+  // Deny path: any other text denies, with the text as the reason.
+  const denyCall = client.callTool({
+    name: "approve",
+    arguments: { tool_name: "Edit", input: { file_path: "/etc/hosts" }, agent: "e2e-agent" }
+  })
+  const denyMsg = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.kind === "approval" && e.message.body.includes("Edit")
+    )
+  )
+  ws.send(JSON.stringify({ type: "answer", id: denyMsg.message.id, text: "not on this host" }))
+  const denyResult = (await denyCall) as { content: Array<{ type: string; text: string }> }
+  expect(JSON.parse(denyResult.content[0]!.text)).toEqual({
+    behavior: "deny",
+    message: "not on this host"
+  })
+
+  await client.close()
+  ws.close()
+}, 15_000)
+
+test("a blocked tool call keeps the matching session's lastSeen fresh", async () => {
+  // Session with the same roster identity the tool call will carry.
+  const registerRes = await fetch(`${BASE}/sessions/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "touch-1", agent: "touch-agent", project: "humans.sh" })
+  })
+  const before = ((await registerRes.json()) as { lastSeen: number }).lastSeen
+
+  const { ws, events, open } = connectWs()
+  await open
+  const client = await connectMcp()
+  const call = client.callTool({
+    name: "ask",
+    arguments: { question: "Blocked?", agent: "touch-agent", project: "humans.sh" }
+  })
+  const created = await waitFor(() =>
+    events.find(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.body === "Blocked?"
+    )
+  )
+
+  // Several 100ms keep-alive ticks pass; each bumps last_seen (no broadcast).
+  await Bun.sleep(500)
+  const during = await fetch(`${BASE}/sessions/touch-1`)
+  expect((((await during.json()) as { lastSeen: number }).lastSeen)).toBeGreaterThan(before)
+
+  ws.send(JSON.stringify({ type: "answer", id: created.message.id, text: "unblocked" }))
+  await call
   await client.close()
   ws.close()
 }, 15_000)

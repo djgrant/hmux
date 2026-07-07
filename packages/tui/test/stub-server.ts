@@ -9,6 +9,9 @@ const messages: Message[] = [
   { id: "m3", kind: "ask", agent: "scraper", body: "Rate limit hit on API — back off for 1h?", status: "pending", createdAt: now - 5 * 60_000 },
   { id: "m4", kind: "ask", agent: "docs-bot", project: "humans.sh", body: "Use **bold** headings and `inline code` in the README?\n\n- option a\n- option b", status: "answered", answer: "Yes — go with **option a**.", createdAt: now - 3 * 60 * 60_000, answeredAt: now - 2 * 60 * 60_000 },
   { id: "m5", kind: "notify", agent: "ci-bot", project: "humans.sh", body: "Build passed on `main` (2m14s).", status: "pending", createdAt: now - 30_000 },
+  // Approvals: permission prompts from headless agents (their own section).
+  { id: "m6", kind: "approval", agent: "headless-1", project: "humans.sh", body: "wants to run Bash\n\n```json\n{\n  \"command\": \"rm -rf dist\"\n}\n```", suggestion: "allow", status: "pending", createdAt: now - 20_000 },
+  { id: "m7", kind: "approval", agent: "headless-1", project: "humans.sh", body: "wants to run Edit\n\n```json\n{\n  \"file_path\": \"release.ts\"\n}\n```", suggestion: "allow", status: "pending", createdAt: now - 10_000 },
 ]
 
 // Sessions covering every presence state: working (green dot on m1), idle +
@@ -17,7 +20,7 @@ const messages: Message[] = [
 const sessions: Session[] = [
   { id: "s1", agent: "refactor-bot", project: "humans.sh", model: "fable", status: "working", bound: false, startedAt: now - 10 * 60_000, lastSeen: now },
   { id: "s2", agent: "deploy-bot", project: "humans.sh", status: "idle", bound: true, startedAt: now - 90 * 60_000, lastSeen: now - 20_000 },
-  { id: "s3", agent: "ci-bot", project: "humans.sh", status: "needs-attention", bound: false, startedAt: now - 40 * 60_000, lastSeen: now },
+  { id: "s3", agent: "ci-bot", project: "humans.sh", status: "needs-attention", detail: "Claude needs your permission to use Bash", bound: false, startedAt: now - 40 * 60_000, lastSeen: now },
   { id: "s4", agent: "scraper", status: "idle", bound: false, startedAt: now - 3 * 60 * 60_000, lastSeen: now - 30 * 60_000, endedAt: now - 25 * 60_000 },
   // Stale but NOT ended (no heartbeat for 10m): stays listed, hollow marker.
   { id: "s5", agent: "prover", project: "humans.sh", status: "working", bound: false, startedAt: now - 5 * 60_000, lastSeen: now - 10 * 60_000 },

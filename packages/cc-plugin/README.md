@@ -69,6 +69,37 @@ pointing at `http://localhost:7373/mcp`, so the `ask`/`notify` tools are
 available whenever the plugin is enabled.
 
 Heads-up: a bound session's FIRST `mcp__humans__ask`/`mcp__humans__notify`
-call may hit a Claude Code permission prompt (which the TUI surfaces as
-needs-attention). Allow the humans tools once — e.g. "always allow" when
+call may hit a Claude Code permission prompt (which the TUI surfaces as a
+blocked roster label). Allow the humans tools once — e.g. "always allow" when
 prompted — so bound agents can reach your inbox unattended.
+
+## Headless agents: permission prompts in your inbox
+
+Non-interactive (`-p`) runs have no terminal to show permission prompts.
+Route them to your inbox instead with the humans `approve` tool:
+
+```sh
+claude -p --permission-prompt-tool mcp__humans__approve "run the release script"
+```
+
+The humans MCP server must be available to that session — the plugin's
+[`.mcp.json`](.mcp.json) provides it when the plugin is enabled; otherwise
+pass it explicitly:
+
+```sh
+claude -p --permission-prompt-tool mcp__humans__approve \
+  --mcp-config '{"mcpServers":{"humans":{"type":"http","url":"http://localhost:7373/mcp"}}}' \
+  "run the release script"
+```
+
+Each permission prompt appears in the TUI's **approvals** section and blocks
+the agent until you answer: accept the `allow` ghost (tab, then ⏎) to
+approve; any other reply denies, with your text sent to the agent as the
+reason. Multiple approvals can be shift-selected and allowed in one go. The
+permission tool itself is exempt from permission checks.
+
+Note: Claude Code invokes the permission tool itself, passing only
+`tool_name`/`input`/`tool_use_id` — so CLI-driven approvals arrive under a
+generated agent id rather than a roster identity. The tool's optional
+`agent`/`project` params exist for SDK `canUseTool`-style integrations that
+can forward one.

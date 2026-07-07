@@ -170,13 +170,14 @@ export interface Group {
 }
 
 /**
- * Pending messages grouped by project (group order = first appearance,
- * oldest-first). Answered messages are not listed in the queue at all.
+ * Pending asks/notifies grouped by project (group order = first appearance,
+ * oldest-first). Answered messages are not listed in the queue at all;
+ * approvals live in their own sidebar section instead.
  */
 export const groups = createMemo<Group[]>(() => {
   const byProject = new Map<string, Group>()
   for (const m of ordered()) {
-    if (m.status !== "pending") continue
+    if (m.status !== "pending" || m.kind === "approval") continue
     const key = m.project ?? NO_PROJECT
     let group = byProject.get(key)
     if (!group) {
@@ -188,8 +189,19 @@ export const groups = createMemo<Group[]>(() => {
   return [...byProject.values()]
 })
 
-/** Queue navigation order (pending only), matching the displayed order. */
-export const pending = createMemo(() => groups().flatMap((g) => g.messages))
+/** Pending approval requests, oldest-first — the "approvals" section. */
+export const approvals = createMemo(() =>
+  ordered().filter((m) => m.status === "pending" && m.kind === "approval"),
+)
+
+/**
+ * Queue navigation/answer order (pending only), matching the displayed
+ * order: message groups first, then the approvals section.
+ */
+export const pending = createMemo(() => [
+  ...groups().flatMap((g) => g.messages),
+  ...approvals(),
+])
 
 // --- Sessions / presence -----------------------------------------------------
 
@@ -410,6 +422,9 @@ export function extendSelection(dir: 1 | -1) {
   if (idx === -1) return moveHighlight(dir)
   if (!state.selectAnchorId) setState("selectAnchorId", state.highlightId)
   const next = Math.min(list.length - 1, Math.max(0, idx + dir))
+  // A selection never crosses the messages/approvals boundary: one merged
+  // answer must not mix "allow" semantics with free-text replies.
+  if ((list[idx]!.kind === "approval") !== (list[next]!.kind === "approval")) return
   setState("highlightId", list[next]!.id)
 }
 

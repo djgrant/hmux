@@ -1,7 +1,16 @@
 import { For, Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { Message, Session } from "@humans/protocol"
-import { formatAge, groups, presenceOf, roster, selectedIds, sessionStale, state } from "../store"
+import {
+  approvals,
+  formatAge,
+  groups,
+  presenceOf,
+  roster,
+  selectedIds,
+  sessionStale,
+  state,
+} from "../store"
 import {
   ACCENT,
   ATTENTION,
@@ -16,9 +25,16 @@ import {
 } from "../theme"
 
 function snippet(m: Message): string {
-  const words = m.body.replace(/\s+/g, " ").trim().split(" ")
+  // First non-empty line only: multi-line bodies (approval input fences,
+  // ask context paragraphs) must not leak markdown noise into the row.
+  const lines = m.body.split("\n")
+  const firstIdx = lines.findIndex((l) => l.trim().length > 0)
+  const first = (lines[firstIdx] ?? "").replace(/\s+/g, " ").trim()
+  const words = first.split(" ")
   const head = words.slice(0, 5).join(" ")
-  return words.length > 5 ? `${head}…` : head
+  const more =
+    words.length > 5 || lines.slice(firstIdx + 1).some((l) => l.trim().length > 0)
+  return more ? `${head}…` : head
 }
 
 function Row(props: { message: Message }) {
@@ -109,10 +125,15 @@ function RosterRow(props: { session: Session }) {
   const statusText = () => {
     if (stale() || props.session.status === "idle")
       return `idle ${formatAge(props.session.lastSeen)}`
-    return props.session.status === "needs-attention" ? "needs attention" : "working"
+    return props.session.status === "needs-attention" ? "blocked" : "working"
   }
+  // Second line: WHY the session is blocked (the permission-prompt text).
+  // Only while needs-attention and fresh — the server clears detail on any
+  // other status, and a stale session's old reason is just noise.
+  const detail = () =>
+    !stale() && props.session.status === "needs-attention" ? props.session.detail : undefined
   return (
-    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2}>
+    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2} flexDirection="column">
       <text wrapMode="none" truncate fg={fg()}>
         <span style={{ fg: marker().fg }}>{marker().text}</span>
         {props.session.agent}
@@ -122,6 +143,15 @@ function RosterRow(props: { session: Session }) {
         </span>
         {props.session.bound ? <span style={{ fg: ACCENT }}>{"  ⁘ bound"}</span> : null}
       </text>
+      <Show when={detail()} keyed>
+        {(reason) => (
+          <box paddingLeft={2}>
+            <text wrapMode="none" truncate fg={highlighted() && queueFocused() ? DIM : FAINT}>
+              {reason}
+            </text>
+          </box>
+        )}
+      </Show>
     </box>
   )
 }
@@ -161,6 +191,16 @@ export function Queue() {
             </box>
           )}
         </For>
+      </Show>
+      {/* Approvals: permission requests from headless agents, between the
+          messages and the roster (they're answerable like messages but
+          semantically closer to agent state). Exceptional traffic — when
+          empty the whole section disappears, no heading, no bracket line. */}
+      <Show when={approvals().length > 0}>
+        <box flexDirection="column" marginBottom={1}>
+          <SectionHeading label="approvals" />
+          <For each={approvals()}>{(m) => <Row message={m} />}</For>
+        </box>
       </Show>
       <SectionHeading label="agents" />
       <Show when={roster().length > 0} fallback={<EmptyLine label="[no agents online]" />}>

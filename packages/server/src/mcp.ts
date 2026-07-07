@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js"
+import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js"
 import { Effect } from "effect"
 import { z } from "zod"
 import type { Message } from "@humans/protocol"
@@ -7,7 +9,8 @@ import { Hub } from "./hub"
 
 type Runner = <A, E>(effect: Effect.Effect<A, E, Hub>) => Promise<A>
 
-const PROGRESS_INTERVAL_MS = 20_000
+// Overridable so tests can exercise keep-alive behaviour without 20s waits.
+const PROGRESS_INTERVAL_MS = Number(process.env.HUMANS_PROGRESS_INTERVAL_MS) || 20_000
 
 const randomId = (prefix: string) => {
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
@@ -16,6 +19,52 @@ const randomId = (prefix: string) => {
     suffix += alphabet[Math.floor(Math.random() * alphabet.length)]
   }
   return `${prefix}-${suffix}`
+}
+
+/** The tool-handler `extra` as the SDK types it. */
+type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>
+
+/**
+ * Keep blocked tool calls alive while waiting for the human. Two jobs per
+ * tick: (1) a progress/logging notification so clients with idle timeouts
+ * hold the HTTP stream open; (2) bump the matching session's last_seen so a
+ * session blocked on ask/approve doesn't drift stale in the roster (no hooks
+ * fire while a tool call is in flight). Only caller-provided agent names are
+ * touched — randomId fallbacks match no session by construction.
+ * Returns the stop function.
+ */
+const startKeepAlive = (
+  run: Runner,
+  extra: ToolExtra,
+  waitingText: string,
+  agent?: string,
+  project?: string
+): (() => void) => {
+  const progressToken = extra._meta?.progressToken
+  let ticks = 0
+  const keepAlive = setInterval(() => {
+    if (agent !== undefined) {
+      void run(Effect.flatMap(Hub, (hub) => hub.touchSessionByAgent(agent, project))).catch(
+        () => {}
+      )
+    }
+    if (progressToken !== undefined) {
+      void extra
+        .sendNotification({
+          method: "notifications/progress",
+          params: { progressToken, progress: ++ticks, message: waitingText }
+        })
+        .catch(() => {})
+    } else {
+      void extra
+        .sendNotification({
+          method: "notifications/message",
+          params: { level: "debug", data: `humans.sh: ${waitingText}` }
+        })
+        .catch(() => {})
+    }
+  }, PROGRESS_INTERVAL_MS)
+  return () => clearInterval(keepAlive)
 }
 
 const buildServer = (run: Runner) => {
@@ -68,36 +117,76 @@ const buildServer = (run: Runner) => {
       }
       await run(Effect.flatMap(Hub, (hub) => hub.publishNew(message)))
 
-      // Keep clients with idle timeouts alive while we wait for the human.
-      const progressToken = extra._meta?.progressToken
-      let ticks = 0
-      const keepAlive = setInterval(() => {
-        if (progressToken !== undefined) {
-          void extra
-            .sendNotification({
-              method: "notifications/progress",
-              params: {
-                progressToken,
-                progress: ++ticks,
-                message: "Waiting for the human to answer..."
-              }
-            })
-            .catch(() => {})
-        } else {
-          void extra
-            .sendNotification({
-              method: "notifications/message",
-              params: { level: "debug", data: "humans.sh: waiting for the human to answer" }
-            })
-            .catch(() => {})
-        }
-      }, PROGRESS_INTERVAL_MS)
-
+      const stopKeepAlive = startKeepAlive(
+        run,
+        extra,
+        "Waiting for the human to answer...",
+        agent,
+        project
+      )
       try {
         const answer = await run(Effect.flatMap(Hub, (hub) => hub.awaitAnswer(message.id)))
         return { content: [{ type: "text", text: answer }] }
       } finally {
-        clearInterval(keepAlive)
+        stopKeepAlive()
+      }
+    }
+  )
+
+  server.registerTool(
+    "approve",
+    {
+      title: "Ask the human to approve a tool use",
+      description:
+        "Permission-prompt tool for headless Claude Code sessions (pass " +
+        "--permission-prompt-tool mcp__humans__approve). Sends the requested tool use to " +
+        "the human inbox and BLOCKS until they allow or deny it. Returns the " +
+        "permission-result JSON Claude Code expects.",
+      inputSchema: {
+        tool_name: z.string().describe("Name of the tool requesting permission"),
+        input: z.record(z.string(), z.unknown()).describe("The input the tool will receive"),
+        tool_use_id: z.string().optional().describe("The unique tool use request ID"),
+        agent: z.string().optional().describe("Your agent name, if you have one"),
+        project: z
+          .string()
+          .optional()
+          .describe("The project you are working in (e.g. its directory)")
+      }
+    },
+    async ({ tool_name, input, tool_use_id: _toolUseId, agent, project }, extra) => {
+      // Human-readable body: what the agent wants to run, input as a fence.
+      const message: Message = {
+        id: crypto.randomUUID(),
+        kind: "approval",
+        agent: agent ?? randomId("agent"),
+        ...(project !== undefined ? { project } : {}),
+        body: `wants to run ${tool_name}\n\n\`\`\`json\n${JSON.stringify(input, null, 2)}\n\`\`\``,
+        suggestion: "allow",
+        status: "pending",
+        createdAt: Date.now()
+      }
+      await run(Effect.flatMap(Hub, (hub) => hub.publishNew(message)))
+
+      const stopKeepAlive = startKeepAlive(
+        run,
+        extra,
+        "Waiting for the human to approve...",
+        agent,
+        project
+      )
+      try {
+        const answer = await run(Effect.flatMap(Hub, (hub) => hub.awaitAnswer(message.id)))
+        // Claude Code's permission-prompt contract: JSON *as text content*.
+        // Exactly "allow" approves (updatedInput is optional; echoing the
+        // original input back is the no-modification case); ANY other text
+        // is a denial whose text goes to the model as the reason.
+        const allowed = answer.trim().toLowerCase() === "allow"
+        const result = allowed
+          ? { behavior: "allow", updatedInput: input }
+          : { behavior: "deny", message: answer }
+        return { content: [{ type: "text", text: JSON.stringify(result) }] }
+      } finally {
+        stopKeepAlive()
       }
     }
   )
