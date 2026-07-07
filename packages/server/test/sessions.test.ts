@@ -223,9 +223,26 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   expect(beaten.status).toBe("working")
   expect(beaten.lastSeen).toBeGreaterThan(idled.lastSeen)
 
-  // Notification -> needs-attention
-  await runHook({ session_id: id, cwd, hook_event_name: "Notification" })
+  // Notification: only permission wording means needs-attention; the ~60s
+  // idle notification maps to idle; anything else leaves status untouched.
+  await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "Notification",
+    message: "Claude needs your permission to use Bash"
+  })
   expect((await getSession(id)).status).toBe("needs-attention")
+  await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "Notification",
+    message: "Claude is waiting for your input"
+  })
+  expect((await getSession(id)).status).toBe("idle")
+  await runHook({ session_id: id, cwd, hook_event_name: "Notification", message: "Auth success" })
+  expect((await getSession(id)).status).toBe("idle") // untouched
+  await runHook({ session_id: id, cwd, hook_event_name: "Notification" }) // no message field
+  expect((await getSession(id)).status).toBe("idle") // untouched
 
   // UserPromptSubmit -> working; not bound, so no output
   const promptUnbound = await runHook({
@@ -334,6 +351,14 @@ test("needs-attention transition publishes ONE notify message", async () => {
   await setStatus("working")
   await setStatus("needs-attention")
   await waitFor(() => (naMessages().length === 2 ? true : undefined))
+
+  // idle → needs-attention never publishes: genuine permission prompts
+  // happen mid-turn (working); a flip from idle is a stray idle-style
+  // notification that slipped through the hook-side filter.
+  await setStatus("idle")
+  await setStatus("needs-attention")
+  await Bun.sleep(300)
+  expect(naMessages().length).toBe(2)
   ws.close()
 }, 15_000)
 

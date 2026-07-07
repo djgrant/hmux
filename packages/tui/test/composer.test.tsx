@@ -86,4 +86,28 @@ test("shift+↑↓ cycles the current message in place; modified returns newline
   await settle()
   expect(sent).toEqual([["c1", "abc!\n\n\n\n"]])
   expect(state.currentId).toBe("c2")
+
+  // --- Dead-keyboard resilience ---------------------------------------------
+  // c2's draft ("xyz", cursor 3) is restored in the remounted composer.
+  // Click on the message body: OpenTUI scrollboxes are focusable by default
+  // and click-to-focus would steal renderable focus from the textarea — our
+  // focusable=false override keeps typing alive.
+  await setup.mockMouse.click(60, 3)
+  await settle()
+  setup.mockInput.typeText("!")
+  await settle()
+  expect(drafts.get("c2")).toEqual({ text: "xyz!", cursor: 4 })
+
+  // Simulated focus steal (whatever the cause): typing goes dead; the
+  // terminal focus event must re-assert composer focus so typing resumes.
+  setup.renderer.currentFocusedRenderable?.blur()
+  await settle()
+  setup.mockInput.typeText("?")
+  await settle()
+  expect(drafts.get("c2")?.text).toBe("xyz!") // proves keys were dead
+  setup.renderer.emit("focus")
+  await settle()
+  setup.mockInput.typeText("?")
+  await settle()
+  expect(drafts.get("c2")).toEqual({ text: "xyz!?", cursor: 5 })
 }, 20_000)

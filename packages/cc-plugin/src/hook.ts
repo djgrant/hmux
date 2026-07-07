@@ -9,7 +9,9 @@
  *                       + GET /sessions/:id; if bound and not yet injected
  *                       this session (marker file), emit additionalContext
  *   Stop             -> POST /sessions/:id/status {status: "idle"}
- *   Notification     -> POST /sessions/:id/status {status: "needs-attention"}
+ *   Notification     -> POST /sessions/:id/status — "needs-attention" only
+ *                       for permission prompts; the idle "waiting for your
+ *                       input" notification maps to "idle"; others no-op
  *   SessionEnd       -> POST /sessions/:id/end (+ clear marker)
  *
  * PostToolUse is the heartbeat: every status call bumps last_seen on the
@@ -61,6 +63,8 @@ interface HookInput {
   cwd?: string
   hook_event_name?: string
   model?: unknown
+  /** Notification events: the notification text. */
+  message?: unknown
 }
 
 interface SessionInfo {
@@ -197,9 +201,21 @@ const main = async () => {
     case "Stop":
       await post(`/sessions/${encoded}/status`, { status: "idle" })
       return
-    case "Notification":
-      await post(`/sessions/${encoded}/status`, { status: "needs-attention" })
+    case "Notification": {
+      // Notification fires for MORE than permission prompts — notably the
+      // "Claude is waiting for your input" idle notification (~60s after
+      // the session idles) and auth/elicitation events. Only a genuine
+      // attention case may set needs-attention (the server publishes an
+      // inbox notify on that transition); the idle notification maps to
+      // idle, and unknown notification kinds leave the status untouched.
+      const text = typeof input.message === "string" ? input.message : ""
+      if (/permission/i.test(text)) {
+        await post(`/sessions/${encoded}/status`, { status: "needs-attention" })
+      } else if (/waiting for your input/i.test(text)) {
+        await post(`/sessions/${encoded}/status`, { status: "idle" })
+      }
       return
+    }
     case "SessionEnd":
       clearMarker(id)
       await post(`/sessions/${encoded}/end`)

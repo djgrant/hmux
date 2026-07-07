@@ -74,7 +74,13 @@ export function MessageView(props: {
       <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
         {header()}
         <scrollbox
-          ref={props.scrollRef}
+          // focusable=false even without a scrollRef consumer: a click on the
+          // body must never steal renderable focus from the composer (see the
+          // setMessageScroll note in App.tsx).
+          ref={(r: ScrollBoxRenderable) => {
+            r.focusable = false
+            props.scrollRef?.(r)
+          }}
           flexGrow={1}
           minHeight={0}
           contentOptions={{ flexDirection: "column", gap: 1 }}

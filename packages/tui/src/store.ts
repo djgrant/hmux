@@ -98,6 +98,15 @@ export function deleteDraft(id: string) {
 const [composerEmpty, setComposerEmpty] = createSignal(true)
 export { composerEmpty, setComposerEmpty }
 
+// Terminal-focus epoch: bumped whenever the terminal regains focus so the
+// composer can re-assert textarea focus (resilience against anything having
+// stolen renderable focus while the user was away).
+const [focusEpoch, setFocusEpoch] = createSignal(0)
+export { focusEpoch }
+export function bumpFocusEpoch() {
+  setFocusEpoch((e) => e + 1)
+}
+
 // Clock signal for live-ish age rendering.
 const [now, setNow] = createSignal(Date.now())
 setInterval(() => setNow(Date.now()), 15_000)

@@ -1,6 +1,6 @@
-import { Show } from "solid-js"
+import { Show, createEffect } from "solid-js"
 import type { KeyBinding, KeyEvent, TextareaRenderable } from "@opentui/core"
-import { cycleCurrent, drafts, focusQueue, setComposerEmpty, setDraft } from "../store"
+import { cycleCurrent, drafts, focusEpoch, focusQueue, setComposerEmpty, setDraft } from "../store"
 import { BODY, FAINT, GUTTER, GUTTER_FADED } from "../theme"
 
 // Plain ⏎ is the ONLY submit; every modified return means newline.
@@ -36,6 +36,14 @@ export function Composer(props: {
           if (ref) setDraft(id, { text: ref.plainText, cursor: ref.cursorOffset })
         }
         queueMicrotask(() => setComposerEmpty(empty()))
+        // Resilience: when the terminal regains focus, re-assert textarea
+        // focus in case something stole renderable focus while the user was
+        // away (a stray click, terminal mode weirdness). focus() no-ops when
+        // already focused, so this is idempotent.
+        createEffect(() => {
+          focusEpoch()
+          if (props.focused) ref?.focus()
+        })
         return (
           <box
             border

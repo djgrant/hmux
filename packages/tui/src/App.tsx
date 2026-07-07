@@ -8,6 +8,7 @@ import {
   clearMerged,
   deleteDraft,
   extendSelection,
+  bumpFocusEpoch,
   cycleCurrent,
   focusQueue,
   highlightedSession,
@@ -100,10 +101,17 @@ export function App(props: {
   const notifier = createNotifier({
     trigger: (message, title) => renderer.triggerNotification(message, title),
   })
-  renderer.on("focus", notifier.onFocus)
+  // On terminal focus, besides notification gating, bump the focus epoch so
+  // the composer re-asserts textarea focus — resilience against renderable
+  // focus having been stolen while away (see the scrollbox note below).
+  const onTerminalFocus = () => {
+    notifier.onFocus()
+    bumpFocusEpoch()
+  }
+  renderer.on("focus", onTerminalFocus)
   renderer.on("blur", notifier.onBlur)
   onCleanup(() => {
-    renderer.off("focus", notifier.onFocus)
+    renderer.off("focus", onTerminalFocus)
     renderer.off("blur", notifier.onBlur)
   })
   createEffect(() => {
@@ -131,8 +139,18 @@ export function App(props: {
   // The displayed message's body scrollbox (single or merged view). Keyed
   // remounts overwrite the ref on every message switch; scrollBy on a
   // just-unmounted scrollbox is a harmless no-op.
+  //
+  // focusable=false is load-bearing: ScrollBoxRenderable is focusable by
+  // default, and the renderer's click-to-focus walks up from the click target
+  // to the nearest focusable — so a left click anywhere on the message body
+  // (e.g. clicking back into the terminal) would FOCUS THE SCROLLBOX and blur
+  // the composer textarea, leaving typing dead. Wheel scrolling and our
+  // PgUp/PgDn handling don't need scrollbox focus.
   let messageScroll: ScrollBoxRenderable | undefined
-  const setMessageScroll = (r: ScrollBoxRenderable) => (messageScroll = r)
+  const setMessageScroll = (r: ScrollBoxRenderable) => {
+    messageScroll = r
+    r.focusable = false
+  }
 
   useKeyboard((key) => {
     // PgUp/PgDn scroll the message body from ANY focus state: plain ↑↓ are

@@ -142,16 +142,23 @@ export const HubLive = Layer.effect(
           }
           if (!session) return yield* Effect.die(`session ${id} vanished`)
           broadcast({ type: "session.updated", session })
-          // A session newly waiting on the human (permission prompt, input
-          // request) surfaces in the inbox like any other notify. Only on the
-          // TRANSITION to needs-attention — repeat posts stay silent.
-          if (status === "needs-attention" && before?.status !== "needs-attention") {
+          // A session newly waiting on the human (permission prompt) surfaces
+          // in the inbox like any other notify. Only on the TRANSITION to
+          // needs-attention — repeat posts stay silent — and never FROM idle:
+          // genuine permission prompts happen mid-turn (working), while an
+          // idle→needs-attention flip is almost certainly a stray idle-style
+          // notification that slipped through the hook-side filter.
+          if (
+            status === "needs-attention" &&
+            before?.status !== "needs-attention" &&
+            before?.status !== "idle"
+          ) {
             yield* publishNewMessage({
               id: crypto.randomUUID(),
               kind: "notify",
               agent: session.agent,
               ...(session.project !== undefined ? { project: session.project } : {}),
-              body: "waiting on you in the terminal (permission or input)",
+              body: "waiting on you in the terminal (permission prompt)",
               status: "pending",
               createdAt: Date.now()
             })
