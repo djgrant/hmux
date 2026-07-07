@@ -83,6 +83,16 @@ function sendBind(sessionId: string, bound: boolean) {
 
 connect()
 render(() => <App sendAnswer={sendAnswer} sendBind={sendBind} />, {
+  // Precaution (round 20): OpenTUI's threaded backend (macOS default) has a
+  // real race — out-of-band writeOut calls (terminal title, OS notification;
+  // both fire on message arrival) write from the main thread after releasing
+  // the render mutex, while the render thread flushes frames, and BOTH share
+  // ONE 4096-byte staging buffer (renderer-output.zig StdoutOutput). A torn
+  // flush there can drop/duplicate chunks. It was NOT the round-20 smearing
+  // bug (that was sidebar flex-squeeze, fixed in Queue.tsx), but the failure
+  // mode is identical in kind; single-threaded output removes it for a
+  // negligible latency cost at our frame sizes.
+  useThread: false,
   // The renderer renders on demand (requestRender), but frames are throttled
   // to maxFps; raise it from the default 60 so a keystroke's redraw is
   // scheduled within ~8ms instead of up to ~16ms.

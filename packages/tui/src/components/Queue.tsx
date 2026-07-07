@@ -83,7 +83,10 @@ function Row(props: { message: Message }) {
     // flush from the terminal's left edge to the main pane; only the text
     // keeps inner padding. paddingLeft 1 + the 2-cell marker column keeps the
     // agent name at the same column (3) as before markers existed.
-    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2}>
+    // flexShrink=0 is LOAD-BEARING (round 20): when sidebar content exceeds
+    // the pane height, yoga would otherwise shrink rows to zero height and
+    // STACK their text on shared lines — message text smeared over the TUI.
+    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2} flexShrink={0}>
       {/* wrapMode none + truncate: long rows clip instead of wrapping or
           stretching the pane. */}
       <text wrapMode="none" truncate fg={fg()}>
@@ -137,7 +140,7 @@ function RosterRow(props: { session: Session }) {
   const detail = () =>
     !stale() && props.session.status === "needs-attention" ? props.session.detail : undefined
   return (
-    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2} flexDirection="column">
+    <box backgroundColor={bg()} paddingLeft={1} paddingRight={2} flexDirection="column" flexShrink={0}>
       <text wrapMode="none" truncate fg={fg()}>
         <span style={{ fg: marker().fg }}>{marker().text}</span>
         {props.session.agent}
@@ -172,6 +175,14 @@ export function Queue() {
     // highlight/selection paint reaches both edges. Both section headings are
     // always visible; an empty section shows its faint bracket line instead
     // of content.
+    //
+    // overflow=hidden + flexShrink=0 on every child is LOAD-BEARING (round
+    // 20): when the queue+roster outgrow the pane height, yoga would
+    // otherwise SHRINK rows to zero height, stacking several rows' text on
+    // the same terminal line — the "message text strewn over the TUI"
+    // corruption. With this, overflowing rows clip cleanly off the bottom
+    // instead. (A scrolling sidebar that follows the highlight is the
+    // eventual upgrade.)
     <box
       flexDirection="column"
       width={width()}
@@ -180,13 +191,14 @@ export function Queue() {
       alignSelf="stretch"
       backgroundColor={SIDEBAR_BG}
       paddingTop={1}
+      overflow="hidden"
     >
       <SectionHeading label="messages" />
       <Show when={groups().length > 0} fallback={<EmptyLine label="[no new messages]" />}>
         <For each={groups()}>
           {(group) => (
-            <box flexDirection="column" marginBottom={1}>
-              <box paddingLeft={2} paddingRight={2}>
+            <box flexDirection="column" marginBottom={1} flexShrink={0}>
+              <box paddingLeft={2} paddingRight={2} flexShrink={0}>
                 <text wrapMode="none" truncate fg={state.focus === "queue" ? DIM : FAINT}>
                   {group.project}
                 </text>
@@ -201,7 +213,7 @@ export function Queue() {
           semantically closer to agent state). Exceptional traffic — when
           empty the whole section disappears, no heading, no bracket line. */}
       <Show when={approvals().length > 0}>
-        <box flexDirection="column" marginBottom={1}>
+        <box flexDirection="column" marginBottom={1} flexShrink={0}>
           <SectionHeading label="approvals" />
           <For each={approvals()}>{(m) => <Row message={m} />}</For>
         </box>
@@ -217,7 +229,7 @@ export function Queue() {
 /** Faint section heading ("messages" / "agents"), always visible. */
 function SectionHeading(props: { label: string }) {
   return (
-    <box paddingLeft={2} paddingRight={2}>
+    <box paddingLeft={2} paddingRight={2} flexShrink={0}>
       <text wrapMode="none" truncate fg={FAINT}>
         {props.label}
       </text>
@@ -228,7 +240,7 @@ function SectionHeading(props: { label: string }) {
 /** Faint empty-state line under a section heading. */
 function EmptyLine(props: { label: string }) {
   return (
-    <box paddingLeft={2} paddingRight={2} marginBottom={1}>
+    <box paddingLeft={2} paddingRight={2} marginBottom={1} flexShrink={0}>
       <text wrapMode="none" truncate fg={FAINT}>
         {props.label}
       </text>
