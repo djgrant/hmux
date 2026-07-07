@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { App } from "../src/App"
 import {
+  SESSION_DROP_MS,
   SESSION_STALE_MS,
   applyInit,
   presenceOf,
@@ -33,13 +34,15 @@ const messages: Message[] = [
   { id: "m3", kind: "ask", agent: "scraper", body: "Back off 1h?", status: "pending", createdAt: now - 300_000 },
 ]
 
-// Roster order is startedAt-asc: s2 (deploy-bot, idle, bound) then s1
-// (refactor-bot, working). s4 (scraper) is ended → excluded, and its pending
-// ask m3 becomes a zombie.
+// Roster order is startedAt-asc: s2 (deploy-bot, idle, bound), s1
+// (refactor-bot, working), then s5 (prover, stale-but-listed). s4 (scraper)
+// is ended → excluded, and its pending ask m3 becomes a zombie.
 const sessions: Session[] = [
   makeSession({ id: "s1", agent: "refactor-bot", project: "humans.sh", status: "working" }),
   makeSession({ id: "s2", agent: "deploy-bot", project: "humans.sh", status: "idle", bound: true, startedAt: now - 90 * 60_000, lastSeen: now - 20_000 }),
   makeSession({ id: "s4", agent: "scraper", status: "idle", startedAt: now - 3 * 3_600_000, lastSeen: now - 30 * 60_000, endedAt: now - 25 * 60_000 }),
+  // Stale (no heartbeat for 10m) but NOT ended: stays listed, hollow marker.
+  makeSession({ id: "s5", agent: "prover", project: "humans.sh", status: "working", startedAt: now - 5 * 60_000, lastSeen: now - 10 * 60_000 }),
 ]
 
 test("session staleness, upsert, and conservative presence matching", () => {
@@ -71,10 +74,13 @@ test("session staleness, upsert, and conservative presence matching", () => {
   upsertSession(makeSession({ id: "s4", agent: "scraper", endedAt: now }))
   expect(presenceOf(messages[2]!)).toBe("dead") // both projects undefined match
 
-  // Roster: live sessions only, startedAt order; ended/stale excluded.
-  // (Wide margin past the threshold: the store's now() ticks at 15s grain.)
+  // Roster: every non-ended session, startedAt order. Stale sessions STAY
+  // (an idle-at-the-prompt agent can't heartbeat); only ended ones and
+  // sessions silent past the hard drop cutoff (~4h) disappear.
   upsertSession(makeSession({ id: "s5", agent: "old-bot", lastSeen: now - SESSION_STALE_MS - 60_000 }))
-  expect(roster().map((s) => s.id)).toEqual(["s1", "s3"])
+  expect(roster().map((s) => s.id)).toEqual(["s1", "s3", "s5"]) // s4 ended, s5 stale but listed
+  upsertSession(makeSession({ id: "s6", agent: "gone-bot", lastSeen: now - SESSION_DROP_MS - 60_000 }))
+  expect(roster().map((s) => s.id)).toEqual(["s1", "s3", "s5"]) // hours-silent: dropped
 })
 
 test("roster rendering, navigation past messages, bind toggle", async () => {
@@ -98,12 +104,16 @@ test("roster rendering, navigation past messages, bind toggle", async () => {
   await settle()
   let frame = setup.captureCharFrame()
 
-  // Roster section: header + one row per live session, ended excluded.
+  // Both section headings; roster = one row per non-ended session.
+  expect(frame).toContain("messages")
   expect(frame).toContain("agents")
   expect(frame).toContain("⁘ bound") // s2 arrives bound
   expect(frame).toContain("idle") // s2 idle-age via formatAge
   expect(frame).toContain("● refactor-bot") // presence dot on the message row too
   expect(frame).toContain("○ scraper") // zombie ask: faint hollow marker
+  // Stale-but-listed: hollow marker + idle age instead of vanishing.
+  // (Age via the store's 15s-granular now() signal: 9m or 10m.)
+  expect(frame).toMatch(/○ prover {2}idle (9|10)m/)
   // scraper's session is ended: it appears as a message row only, not roster.
   expect(inSidebar(frame, "scraper")).toBe(1)
   expect(inSidebar(frame, "deploy-bot")).toBe(2) // message row + roster row
@@ -143,11 +153,15 @@ test("roster rendering, navigation past messages, bind toggle", async () => {
   frame = setup.captureCharFrame()
   expect(frame).toContain("⁘ bound")
 
-  // shift+→ on a roster row must not commit; ↓ wraps back to the messages.
+  // shift+→ on a roster row must not commit; stale rows are navigable too,
+  // then ↓ wraps back to the messages.
   setup.mockInput.pressArrow("right", { shift: true })
   await settle()
   expect(state.focus).toBe("queue")
-  setup.mockInput.pressArrow("down") // wrap: s1 → m2
+  setup.mockInput.pressArrow("down") // stale roster row: s5
+  await settle()
+  expect(state.highlightId).toBe("s5")
+  setup.mockInput.pressArrow("down") // wrap: s5 → m2
   await settle()
   expect(state.highlightId).toBe("m2")
 
@@ -156,10 +170,18 @@ test("roster rendering, navigation past messages, bind toggle", async () => {
   await settle()
   expect(state.focus).toBe("composer")
 
-  // Empty roster: section disappears entirely — no header, no copy.
+  // Empty roster: the heading stays with its faint bracket line.
   applyInit(messages, [])
   await settle()
   frame = setup.captureCharFrame()
-  expect(frame).not.toContain("agents")
+  expect(frame).toContain("agents")
+  expect(frame).toContain("[no agents online]")
   expect(frame).not.toContain("⁘")
+
+  // Fully empty: both headings, both bracket lines.
+  applyInit([], [])
+  await settle()
+  frame = setup.captureCharFrame()
+  expect(frame).toContain("[no new messages]")
+  expect(frame).toContain("[no agents online]")
 }, 20_000)

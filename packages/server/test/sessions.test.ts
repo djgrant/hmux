@@ -9,6 +9,8 @@ const PORT = 7912
 const BASE = `http://localhost:${PORT}`
 const DB = `${import.meta.dir}/.sessions-${Date.now()}.db`
 const HOOK = `${import.meta.dir}/../../cc-plugin/src/hook.ts`
+// Isolated bound-marker state dir so hook runs never touch the real ~/.humans.
+const STATE = `${import.meta.dir}/.hook-state-${Date.now()}`
 
 let proc: Bun.Subprocess
 
@@ -36,6 +38,9 @@ afterAll(() => {
       require("fs").unlinkSync(DB + suffix)
     } catch {}
   }
+  try {
+    require("fs").rmSync(STATE, { recursive: true, force: true })
+  } catch {}
 })
 
 const connectWs = () => {
@@ -65,7 +70,7 @@ const getSession = async (id: string): Promise<Session> => {
 
 const runHook = async (input: Record<string, unknown>, env?: Record<string, string>) => {
   const hookProc = Bun.spawn(["bun", "run", HOOK], {
-    env: { ...process.env, HUMANS_URL: BASE, ...env },
+    env: { ...process.env, HUMANS_URL: BASE, HUMANS_STATE_DIR: STATE, ...env },
     stdin: new TextEncoder().encode(JSON.stringify(input)),
     stdout: "pipe",
     stderr: "pipe"
@@ -201,7 +206,22 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   // Stop -> idle
   const stop = await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
   expect(stop.exitCode).toBe(0)
-  expect((await getSession(id)).status).toBe("idle")
+  const idled = await getSession(id)
+  expect(idled.status).toBe("idle")
+
+  // PostToolUse -> working heartbeat: status flips back and lastSeen bumps.
+  await Bun.sleep(5)
+  const heartbeat = await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash"
+  })
+  expect(heartbeat.exitCode).toBe(0)
+  expect(heartbeat.stdout).toBe("") // heartbeats never emit hook output
+  const beaten = await getSession(id)
+  expect(beaten.status).toBe("working")
+  expect(beaten.lastSeen).toBeGreaterThan(idled.lastSeen)
 
   // Notification -> needs-attention
   await runHook({ session_id: id, cwd, hook_event_name: "Notification" })
@@ -239,12 +259,83 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit")
   expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__ask")
   expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__notify")
+  // The context carries the ROSTER identity so ask/notify messages correlate.
+  expect(output.hookSpecificOutput.additionalContext).toContain('agent: "my-project-hook"')
+  expect(output.hookSpecificOutput.additionalContext).toContain(`project: "${cwd}"`)
+
+  // PostToolUse while bound: UserPromptSubmit already injected the context
+  // into this conversation (marker file), so no duplicate.
+  const postDup = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
+  expect(postDup.exitCode).toBe(0)
+  expect(postDup.stdout).toBe("")
+
+  // Unbind → PostToolUse stays silent and clears the marker.
+  const ws2 = connectWs()
+  await ws2.open
+  ws2.ws.send(JSON.stringify({ type: "bind", sessionId: id, bound: false }))
+  for (let i = 0; i < 100 && (await getSession(id)).bound; i++) await Bun.sleep(50)
+  const postUnbound = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
+  expect(postUnbound.stdout).toBe("")
+
+  // Re-bind mid-task → the NEXT tool call injects once, via PostToolUse
+  // hookSpecificOutput; the one after stays silent.
+  ws2.ws.send(JSON.stringify({ type: "bind", sessionId: id, bound: true }))
+  for (let i = 0; i < 100 && !(await getSession(id)).bound; i++) await Bun.sleep(50)
+  ws2.ws.close()
+  const postRebound = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
+  const reOut = JSON.parse(postRebound.stdout) as {
+    hookSpecificOutput: { hookEventName: string; additionalContext: string }
+  }
+  expect(reOut.hookSpecificOutput.hookEventName).toBe("PostToolUse")
+  expect(reOut.hookSpecificOutput.additionalContext).toContain('agent: "my-project-hook"')
+  const postAgain = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
+  expect(postAgain.stdout).toBe("")
 
   // SessionEnd
   const end = await runHook({ session_id: id, cwd, hook_event_name: "SessionEnd" })
   expect(end.exitCode).toBe(0)
   expect((await getSession(id)).endedAt).toBeGreaterThan(0)
 }, 20_000)
+
+test("needs-attention transition publishes ONE notify message", async () => {
+  const { ws, events, open } = connectWs()
+  await open
+  await fetch(`${BASE}/sessions/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "na-1", agent: "na-bot", project: "/tmp/na-project" })
+  })
+  const naMessages = () =>
+    events.filter(
+      (e): e is Extract<ServerEvent, { type: "message.new" }> =>
+        e.type === "message.new" && e.message.agent === "na-bot"
+    )
+  const setStatus = (status: string) =>
+    fetch(`${BASE}/sessions/na-1/status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status })
+    })
+
+  // Transition working -> needs-attention: one notify lands in the queue.
+  await setStatus("needs-attention")
+  const first = await waitFor(() => naMessages()[0])
+  expect(first.message.kind).toBe("notify")
+  expect(first.message.project).toBe("/tmp/na-project")
+  expect(first.message.body).toContain("waiting on you in the terminal")
+  expect(first.message.status).toBe("pending")
+
+  // Repeat needs-attention posts: NO second message.
+  await setStatus("needs-attention")
+  await Bun.sleep(300)
+  expect(naMessages().length).toBe(1)
+
+  // Recover, then a fresh transition fires again.
+  await setStatus("working")
+  await setStatus("needs-attention")
+  await waitFor(() => (naMessages().length === 2 ? true : undefined))
+  ws.close()
+}, 15_000)
 
 test("hook script is silent and exits 0 when the server is down", async () => {
   const result = await runHook(

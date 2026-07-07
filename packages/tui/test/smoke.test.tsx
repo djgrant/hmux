@@ -258,7 +258,9 @@ test("merge-select, notify dismiss, pruned focus keys, hints", async () => {
   markAnswered("m8", "later", Date.now())
   await settle()
   frame = setup.captureCharFrame()
-  // Empty slate: no copy anywhere, just the painted sidebar.
-  expect(frame).not.toContain("no other messages")
-  expect(frame).not.toContain("no messages — agents will appear here")
+  // Empty queue: both headings stay, each with its faint bracket line.
+  expect(frame).toContain("messages")
+  expect(frame).toContain("[no new messages]")
+  expect(frame).toContain("agents")
+  expect(frame).toContain("[no agents online]")
 }, 20_000)

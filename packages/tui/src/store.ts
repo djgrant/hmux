@@ -184,17 +184,32 @@ export const pending = createMemo(() => groups().flatMap((g) => g.messages))
 
 // --- Sessions / presence -----------------------------------------------------
 
-/** Sessions with no heartbeat for this long are presumed dead. */
+/** Sessions with no heartbeat for this long are POSSIBLY dead. */
 export const SESSION_STALE_MS = 90_000
 
-/** Presumed dead: explicitly ended, or silent past the staleness threshold. */
+/**
+ * Sessions silent for this long are dropped from the roster outright. Hooks
+ * only fire on prompt/tool/stop/notification — a session idle at the prompt
+ * cannot heartbeat, so staleness alone must not evict it (it may be alive).
+ * But kill -9 skips SessionEnd, so without a hard cutoff unkillable zombies
+ * would accumulate forever.
+ */
+export const SESSION_DROP_MS = 4 * 60 * 60_000
+
+/** Possibly dead: explicitly ended, or silent past the staleness threshold. */
 export function sessionStale(session: Session, at = now()): boolean {
   return session.endedAt !== undefined || at - session.lastSeen > SESSION_STALE_MS
 }
 
-/** Live (non-ended, non-stale) sessions in arrival order — the roster. */
+/**
+ * The roster: every non-ended session in arrival order — INCLUDING stale
+ * ones, rendered as "possibly gone" rather than hidden. Only hours-silent
+ * sessions are hard-dropped.
+ */
 export const roster = createMemo(() =>
-  state.sessions.filter((s) => !sessionStale(s)).sort((a, b) => a.startedAt - b.startedAt),
+  state.sessions
+    .filter((s) => s.endedAt === undefined && now() - s.lastSeen <= SESSION_DROP_MS)
+    .sort((a, b) => a.startedAt - b.startedAt),
 )
 
 /**

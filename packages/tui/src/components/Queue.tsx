@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { Message, Session } from "@humans/protocol"
-import { formatAge, groups, presenceOf, roster, selectedIds, state } from "../store"
+import { formatAge, groups, presenceOf, roster, selectedIds, sessionStale, state } from "../store"
 import {
   ACCENT,
   ATTENTION,
@@ -83,29 +83,38 @@ function Row(props: { message: Message }) {
 function RosterRow(props: { session: Session }) {
   const highlighted = () => props.session.id === state.highlightId
   const queueFocused = () => state.focus === "queue"
+  // Stale = no heartbeat past the threshold: "possibly gone". An idle-at-the-
+  // prompt session can't heartbeat (hooks fire on activity only), so it stays
+  // listed — hollow marker + idle age, one shade down — instead of vanishing.
+  const stale = () => sessionStale(props.session)
   const bg = () =>
     highlighted() ? (queueFocused() ? HIGHLIGHT_BG : HIGHLIGHT_BG_MUTED) : undefined
   const fg = () => {
     if (highlighted() && queueFocused()) return BRIGHT
+    if (stale()) return queueFocused() ? DIM : FAINT
     return queueFocused() ? BODY : DIM
   }
   const metaFg = () => {
     if (highlighted() && queueFocused()) return BRIGHT
+    if (stale()) return FAINT
     return queueFocused() ? DIM : FAINT
   }
-  // Status marker: working green, needs-attention amber, idle faint.
-  const dotFg = () => {
-    if (props.session.status === "needs-attention") return ATTENTION
-    return props.session.status === "working" ? LIVE : FAINT
+  // Status marker: working green, needs-attention amber, idle faint; stale
+  // sessions get the same faint hollow marker as dead presence.
+  const marker = () => {
+    if (stale()) return { text: "○ ", fg: FAINT }
+    if (props.session.status === "needs-attention") return { text: "● ", fg: ATTENTION }
+    return { text: "● ", fg: props.session.status === "working" ? LIVE : FAINT }
   }
   const statusText = () => {
-    if (props.session.status === "idle") return `idle ${formatAge(props.session.lastSeen)}`
+    if (stale() || props.session.status === "idle")
+      return `idle ${formatAge(props.session.lastSeen)}`
     return props.session.status === "needs-attention" ? "needs attention" : "working"
   }
   return (
     <box backgroundColor={bg()} paddingLeft={1} paddingRight={2}>
       <text wrapMode="none" truncate fg={fg()}>
-        <span style={{ fg: dotFg() }}>{"● "}</span>
+        <span style={{ fg: marker().fg }}>{marker().text}</span>
         {props.session.agent}
         <span style={{ fg: metaFg() }}>
           {"  "}
@@ -126,8 +135,9 @@ export function Queue() {
     // The sidebar is painted edge to edge: it stretches to the full row
     // height (top to the very last terminal row) from column 0, with NO
     // horizontal padding on the pane itself — rows own their text padding so
-    // highlight/selection paint reaches both edges. Empty queue: just the
-    // painted slate, no copy.
+    // highlight/selection paint reaches both edges. Both section headings are
+    // always visible; an empty section shows its faint bracket line instead
+    // of content.
     <box
       flexDirection="column"
       width={width()}
@@ -137,30 +147,47 @@ export function Queue() {
       backgroundColor={SIDEBAR_BG}
       paddingTop={1}
     >
-      <For each={groups()}>
-        {(group) => (
-          <box flexDirection="column" marginBottom={1}>
-            <box paddingLeft={2} paddingRight={2}>
-              <text wrapMode="none" truncate fg={state.focus === "queue" ? DIM : FAINT}>
-                {group.project}
-              </text>
+      <SectionHeading label="messages" />
+      <Show when={groups().length > 0} fallback={<EmptyLine label="[no new messages]" />}>
+        <For each={groups()}>
+          {(group) => (
+            <box flexDirection="column" marginBottom={1}>
+              <box paddingLeft={2} paddingRight={2}>
+                <text wrapMode="none" truncate fg={state.focus === "queue" ? DIM : FAINT}>
+                  {group.project}
+                </text>
+              </box>
+              <For each={group.messages}>{(m) => <Row message={m} />}</For>
             </box>
-            <For each={group.messages}>{(m) => <Row message={m} />}</For>
-          </box>
-        )}
-      </For>
-      {/* Roster: live agent sessions, below the message groups. Empty roster
-          renders nothing at all — no header, no copy. */}
-      <Show when={roster().length > 0}>
-        <box flexDirection="column">
-          <box paddingLeft={2} paddingRight={2}>
-            <text wrapMode="none" truncate fg={FAINT}>
-              agents
-            </text>
-          </box>
-          <For each={roster()}>{(s) => <RosterRow session={s} />}</For>
-        </box>
+          )}
+        </For>
       </Show>
+      <SectionHeading label="agents" />
+      <Show when={roster().length > 0} fallback={<EmptyLine label="[no agents online]" />}>
+        <For each={roster()}>{(s) => <RosterRow session={s} />}</For>
+      </Show>
+    </box>
+  )
+}
+
+/** Faint section heading ("messages" / "agents"), always visible. */
+function SectionHeading(props: { label: string }) {
+  return (
+    <box paddingLeft={2} paddingRight={2}>
+      <text wrapMode="none" truncate fg={FAINT}>
+        {props.label}
+      </text>
+    </box>
+  )
+}
+
+/** Faint empty-state line under a section heading. */
+function EmptyLine(props: { label: string }) {
+  return (
+    <box paddingLeft={2} paddingRight={2} marginBottom={1}>
+      <text wrapMode="none" truncate fg={FAINT}>
+        {props.label}
+      </text>
     </box>
   )
 }

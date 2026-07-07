@@ -19,6 +19,8 @@ const sessions: Session[] = [
   { id: "s2", agent: "deploy-bot", project: "humans.sh", status: "idle", bound: true, startedAt: now - 90 * 60_000, lastSeen: now - 20_000 },
   { id: "s3", agent: "ci-bot", project: "humans.sh", status: "needs-attention", bound: false, startedAt: now - 40 * 60_000, lastSeen: now },
   { id: "s4", agent: "scraper", status: "idle", bound: false, startedAt: now - 3 * 60 * 60_000, lastSeen: now - 30 * 60_000, endedAt: now - 25 * 60_000 },
+  // Stale but NOT ended (no heartbeat for 10m): stays listed, hollow marker.
+  { id: "s5", agent: "prover", project: "humans.sh", status: "working", bound: false, startedAt: now - 5 * 60_000, lastSeen: now - 10 * 60_000 },
 ]
 
 const sockets = new Set<ServerWebSocket<unknown>>()

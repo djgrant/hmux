@@ -87,16 +87,19 @@ export const HubLive = Layer.effect(
         )
       })
 
+    // Shared by publishNew and the needs-attention transition below.
+    const publishNewMessage = (message: Message) =>
+      store.create(message).pipe(
+        Effect.tap(() => Effect.sync(() => broadcast({ type: "message.new", message })))
+      )
+
     return Hub.of({
       setBroadcast: (fn) =>
         Effect.sync(() => {
           broadcast = fn
         }),
 
-      publishNew: (message) =>
-        store.create(message).pipe(
-          Effect.tap(() => Effect.sync(() => broadcast({ type: "message.new", message })))
-        ),
+      publishNew: publishNewMessage,
 
       awaitAnswer: (id) =>
         Effect.gen(function* () {
@@ -131,6 +134,7 @@ export const HubLive = Layer.effect(
 
       updateSessionStatus: (id, status) =>
         Effect.gen(function* () {
+          const before = yield* store.getSession(id)
           let session = yield* store.setSessionStatus(id, status)
           if (!session) {
             yield* store.registerSession(quietSession(id))
@@ -138,6 +142,20 @@ export const HubLive = Layer.effect(
           }
           if (!session) return yield* Effect.die(`session ${id} vanished`)
           broadcast({ type: "session.updated", session })
+          // A session newly waiting on the human (permission prompt, input
+          // request) surfaces in the inbox like any other notify. Only on the
+          // TRANSITION to needs-attention — repeat posts stay silent.
+          if (status === "needs-attention" && before?.status !== "needs-attention") {
+            yield* publishNewMessage({
+              id: crypto.randomUUID(),
+              kind: "notify",
+              agent: session.agent,
+              ...(session.project !== undefined ? { project: session.project } : {}),
+              body: "waiting on you in the terminal (permission or input)",
+              status: "pending",
+              createdAt: Date.now()
+            })
+          }
           return session
         }),
 
