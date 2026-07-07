@@ -1,14 +1,23 @@
 import { test, expect } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { App } from "../src/App"
-import { addMessage, applyInit, state, stripControls, upsertSession } from "../src/store"
+import {
+  addMessage,
+  announceIncoming,
+  applyInit,
+  banner,
+  state,
+  stripControls,
+  upsertSession,
+} from "../src/store"
 import type { Message, Session } from "@humans/protocol"
 
 const now = Date.now()
 
-// Agents paste ANSI-colored terminal output into bodies; every control
-// character must be stripped at store ingress (round 19: raw ESC bytes in
-// cells / the title OSC strewed message text across the TUI).
+// Agents paste ANSI-colored terminal output into bodies; store ingress must
+// remove complete escape sequences (no "[31m" litter) and any stray control
+// bytes (round 19: raw ESC bytes in cells / the title OSC strewed message
+// text across the TUI).
 test("ingress sanitization strips control chars from messages and sessions", () => {
   const dirty: Message = {
     id: "d1",
@@ -23,14 +32,14 @@ test("ingress sanitization strips control chars from messages and sessions", () 
   }
   applyInit([dirty], [])
   const m = state.messages[0]!
-  expect(m.agent).toBe("bot[31m")
+  expect(m.agent).toBe("bot") // whole CSI removed — no "[31m" litter
   expect(m.project).toBe("proj")
-  expect(m.body).toBe("[31mred[0m line\nsecondline6n") // \n kept, \t/C1 stripped
-  expect(m.context).toBe("ctx]0;evil")
-  expect(m.suggestion).toBe("ok[2J")
+  expect(m.body).toBe("red line\nsecondline") // \n kept; \t, CSI and C1-CSI gone
+  expect(m.context).toBe("ctx") // whole OSC (incl. payload) removed
+  expect(m.suggestion).toBe("ok")
 
   addMessage({ ...dirty, id: "d2", body: "\x1b[2Jcleared?" })
-  expect(state.messages[1]!.body).toBe("[2Jcleared?")
+  expect(state.messages[1]!.body).toBe("cleared?")
 
   const dirtySession: Session = {
     id: "s1",
@@ -45,13 +54,20 @@ test("ingress sanitization strips control chars from messages and sessions", () 
   }
   applyInit([], [dirtySession])
   const s = state.sessions[0]!
-  expect(s.agent).toBe("agent\\")
+  expect(s.agent).toBe("agent") // ESC+\ (lone ESC+char form) removed whole
   expect(s.project).toBe("/p")
-  expect(s.detail).toBe("needs[31m permission")
+  expect(s.detail).toBe("needs permission")
   upsertSession({ ...dirtySession, id: "s2", detail: "d\x07x" })
   expect(state.sessions[1]!.detail).toBe("dx")
 
-  expect(stripControls("a\x1b[31mb\nc\x07")).toBe("a[31mb\nc")
+  // Colored output degrades to clean plain text.
+  expect(stripControls("\x1b[31mred\x1b[0m")).toBe("red")
+  expect(stripControls("a\x1b[31mb\nc\x07")).toBe("ab\nc")
+
+  // The banner path receives the RAW WS message (before addMessage) and must
+  // sanitize independently.
+  announceIncoming(dirty)
+  expect(banner()).toBe("bot: red line")
 })
 
 test("the terminal title never carries control characters", async () => {
@@ -80,7 +96,7 @@ test("the terminal title never carries control characters", async () => {
   })
   await settle()
   const last = titles.at(-1) ?? ""
-  expect(last).toBe("[31mRED first line[0m tail")
+  expect(last).toBe("RED first line tail")
   // No title ever contains a control character.
   for (const t of titles) expect(/[\x00-\x1f\x7f-\x9f]/.test(t)).toBe(false)
 }, 20_000)

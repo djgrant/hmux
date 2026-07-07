@@ -153,8 +153,12 @@ export { incoming }
 
 /** Announce a message.new: flash the banner and expose it to App effects. */
 export function announceIncoming(message: Message) {
-  showBanner(message)
-  setIncoming(message)
+  // The raw WS message bypasses addMessage's ingress sanitization; clean it
+  // here too so the banner text and the notification effect (which reads
+  // `incoming`) never carry escape-sequence remnants.
+  const clean = sanitizeMessage(message)
+  showBanner(clean)
+  setIncoming(clean)
 }
 
 // --- Derived ---------------------------------------------------------------
@@ -336,14 +340,28 @@ export function setConn(conn: ConnState) {
 // into cells and emits those bytes RAW in the frame stream, so an embedded
 // ESC can merge with adjacent output into live escape sequences (strewn
 // text, screen clears); the same text also reaches OSC egress (terminal
-// title). Strip every control character except newline at the ONE choke
-// point where server data enters the store, so nothing downstream has to
-// care. (\t goes too — cell drawing has no tab semantics.)
+// title). Sanitize at the ONE choke point where server data enters the
+// store, so nothing downstream has to care.
+//
+// Two passes: first remove COMPLETE escape sequences so colored output
+// degrades to clean plain text (no "[31m" litter), then strip whatever
+// stray control bytes remain (all C0 except \n, DEL, C1 — \t goes too;
+// cell drawing has no tab semantics).
+const ANSI_SEQUENCES_RE = new RegExp(
+  [
+    "\\x1b\\][^\\x07\\x1b]*(?:\\x07|\\x1b\\\\)?", // OSC (BEL/ST-terminated, or cut off)
+    "\\x1b\\[[0-9;:?]*[ -/]*[@-~]", // CSI
+    "\\x9b[0-9;:?]*[ -/]*[@-~]", // C1 CSI
+    "\\x1b[()*+][ -~]", // charset designation
+    "\\x1b.", // any remaining ESC+single-char form (. excludes \n)
+  ].join("|"),
+  "g",
+)
 const CONTROL_CHARS_RE = /[\x00-\x09\x0b-\x1f\x7f-\x9f]/g
 
-/** Strip terminal control characters (keeps \n). */
+/** Strip ANSI escape sequences and control characters (keeps \n). */
 export function stripControls(text: string): string {
-  return text.replace(CONTROL_CHARS_RE, "")
+  return text.replace(ANSI_SEQUENCES_RE, "").replace(CONTROL_CHARS_RE, "")
 }
 
 const sanitizeOptional = (text: string | undefined): string | undefined =>

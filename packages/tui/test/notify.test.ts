@@ -1,19 +1,39 @@
 import { test, expect } from "bun:test"
 import {
+  NOTIFICATION_BYTE_BUDGET,
   applyTmuxNotificationOverride,
   createNotifier,
   detectTmuxOuterProtocol,
   formatNotification,
+  truncateBytes,
 } from "../src/notify"
 
-test("formatNotification: agent prefix, first line only, control chars stripped, 240 cap", () => {
+test("formatNotification: agent prefix, first line only, sequences stripped, byte cap", () => {
   expect(formatNotification("deploy-bot", "Ship now?\nCI is green.")).toBe("deploy-bot: Ship now?")
-  // Control chars (C0, DEL, C1) stripped; result trimmed.
-  expect(formatNotification("a", "\x1b[31mred\x07 bell\x9b ")).toBe("a: [31mred bell")
-  const long = "x".repeat(500)
-  const formatted = formatNotification("agent", long)
-  expect(formatted.length).toBe(240)
-  expect(formatted.startsWith("agent: xxx")).toBe(true)
+  // ANSI sequences removed whole (no "[31m" litter); controls stripped; trimmed.
+  expect(formatNotification("a", "\x1b[31mred\x07 bell\x9b ")).toBe("a: red bell")
+
+  // Long bodies truncate to the BYTE budget: the notification travels as one
+  // OSC envelope, and oversize payloads get their tail spilled literally on
+  // partial writes (round 19b).
+  const encoder = new TextEncoder()
+  const long = formatNotification("agent", "x".repeat(500))
+  expect(encoder.encode(long).byteLength).toBeLessThanOrEqual(NOTIFICATION_BYTE_BUDGET)
+  expect(long.startsWith("agent: xxx")).toBe(true)
+  expect(long.endsWith("…")).toBe(true)
+
+  // Multibyte truncation lands on code-point boundaries: budget respected,
+  // no split surrogates / replacement chars, em-dashes intact.
+  const multibyte = formatNotification("agent", "—".repeat(200))
+  expect(encoder.encode(multibyte).byteLength).toBeLessThanOrEqual(NOTIFICATION_BYTE_BUDGET)
+  expect(multibyte.includes("�")).toBe(false)
+  expect(multibyte).toMatch(/^agent: —+…$/)
+  const astral = formatNotification("a", "😀".repeat(100))
+  expect(encoder.encode(astral).byteLength).toBeLessThanOrEqual(NOTIFICATION_BYTE_BUDGET)
+  expect(astral.includes("�")).toBe(false)
+
+  // Under budget: untouched, no ellipsis.
+  expect(truncateBytes("short", 120)).toBe("short")
   expect(formatNotification("bot", "")).toBe("bot: ")
 })
 

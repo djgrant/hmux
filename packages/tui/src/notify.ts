@@ -13,6 +13,8 @@
  * than silently drop everything.
  */
 
+import { stripControls } from "./store"
+
 export type NotifyResult = "os" | "bell" | "skipped"
 
 export interface Notifier {
@@ -105,12 +107,46 @@ export function applyTmuxNotificationOverride(
 }
 
 /**
- * Notification body for a message: `agent: first line`, control characters
- * stripped, capped at 240 chars.
+ * Deliberately tiny UTF-8 byte budget for the whole notification text.
+ *
+ * The notification leaves the program as ONE escape sequence (OSC 9/777,
+ * tmux-wrapped with doubled ESCs), and OpenTUI's stdout writer silently
+ * drops the unwritten tail on partial writes (renderer-output.zig,
+ * StdoutOutput.write: `writeAll(data) catch {}` — EAGAIN under frame-storm
+ * pipe pressure). A truncated envelope loses its ST terminator; the
+ * terminal eventually aborts the OSC and prints the REST OF THE PAYLOAD
+ * literally over the UI (round 19b: the tail of a 240-char body strewn
+ * across the bottom row, scrolling the screen under the renderer). A small
+ * payload keeps the entire wrapped envelope well inside atomic-write
+ * territory — and notifications are glanceable one-liners anyway.
+ */
+export const NOTIFICATION_BYTE_BUDGET = 120
+
+/**
+ * Truncate to a UTF-8 byte budget on CODE-POINT boundaries (a blind
+ * string.slice can split a surrogate pair, producing mangled bytes
+ * mid-payload), appending "…" (3 bytes) when cut.
+ */
+export function truncateBytes(text: string, budget: number): string {
+  const encoder = new TextEncoder()
+  if (encoder.encode(text).byteLength <= budget) return text
+  let out = ""
+  let bytes = 0
+  for (const ch of text) {
+    const size = encoder.encode(ch).byteLength
+    if (bytes + size > budget - 3) break
+    out += ch
+    bytes += size
+  }
+  return `${out}…`
+}
+
+/**
+ * Notification body for a message: `agent: first line`, ANSI sequences and
+ * control characters removed, truncated to NOTIFICATION_BYTE_BUDGET bytes.
  */
 export function formatNotification(agent: string, body: string): string {
   const firstLine = body.split("\n")[0] ?? ""
-  // C0 controls (minus nothing — first line already excludes \n), DEL, C1.
-  const clean = firstLine.replace(/[\x00-\x1f\x7f-\x9f]/g, "").trim()
-  return `${agent}: ${clean}`.slice(0, 240)
+  const clean = stripControls(firstLine).trim()
+  return truncateBytes(`${agent}: ${clean}`, NOTIFICATION_BYTE_BUDGET)
 }
