@@ -27,7 +27,7 @@ import { BANNER_BG, DIM, MAIN_BG } from "./theme"
 import { Composer } from "./components/Composer"
 import { Queue } from "./components/Queue"
 import { Footer } from "./components/Footer"
-import { createNotifier, formatNotification } from "./notify"
+import { createNotifier, formatNotification, inTmuxControlMode } from "./notify"
 
 /**
  * Main-pane content cap: ≈960px at typical cell widths (~8–9px), so on very
@@ -69,6 +69,12 @@ export function App(props: {
   sendBind?: (sessionId: string, bound: boolean) => boolean
   /** Writes selected text to the system clipboard. Injectable for tests. */
   copyText?: (text: string) => void
+  /**
+   * Whether OSC notifications may be emitted (default: probe for a tmux
+   * control-mode client). Injectable for tests — the probe shells out to
+   * tmux and would read the machine's real client list.
+   */
+  oscNotificationsSafe?: boolean
 }) {
   const renderer = useRenderer()
   const defaultCopy = (text: string) => {
@@ -104,8 +110,21 @@ export function App(props: {
   // incoming messages, gated on terminal focus. Lives here — not in the ws
   // handler — because only the render tree has a renderer handle; the store's
   // `incoming` signal carries message.new across that boundary.
+  //
+  // Control-mode tmux (iTerm2 -CC, round 21): tmux does NOT unwrap the
+  // `DCS tmux;` passthrough for control clients — it forwards the wrapped
+  // envelope verbatim inside `%output`, and iTerm2 feeds it to the pane
+  // parser as CONTENT. The payload ("agent: first line") then prints
+  // literally at the cursor — i.e. into the composer — and printing on the
+  // bottom row scrolls the screen under the renderer (the shifted/corrupted
+  // sidebar). The env-var override can't prevent this (0.4.3 ignores it and
+  // enables OSC 9 from TERM_FEATURES on its own), so the CALL is gated:
+  // never emit the OSC there; the BEL fallback is safe, and iTerm2 surfaces
+  // pane bells through its native notification support.
+  const oscNotificationsSafe = props.oscNotificationsSafe ?? !inTmuxControlMode()
   const notifier = createNotifier({
-    trigger: (message, title) => renderer.triggerNotification(message, title),
+    trigger: (message, title) =>
+      oscNotificationsSafe ? renderer.triggerNotification(message, title) : false,
   })
   // On terminal focus, besides notification gating, bump the focus epoch so
   // the composer re-asserts textarea focus — resilience against renderable

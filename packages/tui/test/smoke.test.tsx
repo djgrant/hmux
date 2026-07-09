@@ -34,6 +34,10 @@ test("merge-select, notify dismiss, pruned focus keys, hints", async () => {
       <App
         sendAnswer={(id, text) => (sent.push([id, text]), true)}
         copyText={(text) => copied.push(text)}
+        // Pin the OSC gate open: the default probes the machine's real tmux
+        // for control-mode clients, which would suppress the notifications
+        // this test asserts on (and vary by dev environment).
+        oscNotificationsSafe={true}
       />
     ),
     { width: 110, height: 34 },

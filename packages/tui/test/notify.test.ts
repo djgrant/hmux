@@ -5,6 +5,8 @@ import {
   createNotifier,
   detectTmuxOuterProtocol,
   formatNotification,
+  inTmuxControlMode,
+  tmuxHasControlClient,
   truncateBytes,
 } from "../src/notify"
 
@@ -89,28 +91,77 @@ test("detectTmuxOuterProtocol: maps outer-terminal env fingerprints", () => {
 })
 
 test("applyTmuxNotificationOverride: forces protocol only inside tmux", () => {
+  const noControl = () => false
+
   // Inside tmux + iTerm2 fingerprint → sets the env var OpenTUI honors.
   const env1: Record<string, string | undefined> = { TMUX: "/tmp/tmux-1/default,1,0", ITERM_SESSION_ID: "x" }
-  expect(applyTmuxNotificationOverride(env1)).toBe("osc9")
+  expect(applyTmuxNotificationOverride(env1, noControl)).toBe("osc9")
   expect(env1.OPENTUI_NOTIFICATION_PROTOCOL).toBe("osc9")
 
   // Not in tmux → untouched (heuristics work fine there).
   const env2: Record<string, string | undefined> = { ITERM_SESSION_ID: "x" }
-  expect(applyTmuxNotificationOverride(env2)).toBe(null)
+  expect(applyTmuxNotificationOverride(env2, noControl)).toBe(null)
   expect(env2.OPENTUI_NOTIFICATION_PROTOCOL).toBeUndefined()
 
   // Zellij (even with TMUX somehow set) → leave it to OpenTUI's zellij rules.
-  expect(applyTmuxNotificationOverride({ TMUX: "x", ZELLIJ: "0", ITERM_SESSION_ID: "x" })).toBe(null)
+  expect(applyTmuxNotificationOverride({ TMUX: "x", ZELLIJ: "0", ITERM_SESSION_ID: "x" }, noControl)).toBe(null)
 
   // User's explicit setting wins, including disables.
   const env3: Record<string, string | undefined> = { TMUX: "x", ITERM_SESSION_ID: "x", OPENTUI_NOTIFICATION_PROTOCOL: "none" }
-  expect(applyTmuxNotificationOverride(env3)).toBe(null)
+  expect(applyTmuxNotificationOverride(env3, noControl)).toBe(null)
   expect(env3.OPENTUI_NOTIFICATION_PROTOCOL).toBe("none")
 
   // tmux but unknown outer terminal → nothing set, BEL fallback remains.
   const env4: Record<string, string | undefined> = { TMUX: "x", TERM: "tmux-256color" }
-  expect(applyTmuxNotificationOverride(env4)).toBe(null)
+  expect(applyTmuxNotificationOverride(env4, noControl)).toBe(null)
   expect(env4.OPENTUI_NOTIFICATION_PROTOCOL).toBeUndefined()
+})
+
+test("applyTmuxNotificationOverride: control-mode client (iTerm2 -CC) forces 'none'", () => {
+  // A control-mode tmux forwards the wrapped notification DCS VERBATIM in
+  // %output; iTerm2 prints the payload into the pane (the round-21 composer
+  // artifacts). Skipping the override isn't enough — iTerm2's TERM_FEATURES
+  // ("No" capability code) survives into tmux and OpenTUI's heuristic would
+  // enable OSC 9 by itself — so the protocol is explicitly forced to "none";
+  // arrivals fall back to a harmless BEL.
+  const env: Record<string, string | undefined> = {
+    TMUX: "x",
+    ITERM_SESSION_ID: "x",
+    TERM_FEATURES: "T3CwLrMSc7UUw9Ts3BFGsSyHNoSxFP",
+  }
+  expect(applyTmuxNotificationOverride(env, () => true)).toBe("none")
+  expect(env.OPENTUI_NOTIFICATION_PROTOCOL).toBe("none")
+
+  // User's explicit protocol still wins over the control-mode force.
+  const env2: Record<string, string | undefined> = {
+    TMUX: "x",
+    ITERM_SESSION_ID: "x",
+    OPENTUI_NOTIFICATION_PROTOCOL: "osc9",
+  }
+  expect(applyTmuxNotificationOverride(env2, () => true)).toBe(null)
+  expect(env2.OPENTUI_NOTIFICATION_PROTOCOL).toBe("osc9")
+})
+
+test("inTmuxControlMode: only probes inside tmux (not zellij)", () => {
+  // Outside tmux the probe must not even run (it shells out to tmux).
+  expect(inTmuxControlMode({}, () => true)).toBe(false)
+  expect(inTmuxControlMode({ TMUX: "x", ZELLIJ: "0" }, () => true)).toBe(false)
+  expect(inTmuxControlMode({ TMUX: "x" }, () => true)).toBe(true)
+  expect(inTmuxControlMode({ TMUX: "x" }, () => false)).toBe(false)
+})
+
+test("tmuxHasControlClient: parses list-clients output, fails safe", () => {
+  // One control client among normal ones is enough.
+  expect(tmuxHasControlClient(() => "0\n1\n0\n")).toBe(true)
+  expect(tmuxHasControlClient(() => "0\n0\n")).toBe(false)
+  // No clients / no server → not control mode.
+  expect(tmuxHasControlClient(() => "")).toBe(false)
+  // tmux binary missing or errors → fail safe (keep the override).
+  expect(
+    tmuxHasControlClient(() => {
+      throw new Error("no tmux")
+    }),
+  ).toBe(false)
 })
 
 test("notifier: custom title passes through", () => {
