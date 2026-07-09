@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>humans.sh — GUI surfaces</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>
+:root{
+  --surface-2:#ffffff;--surface-1:#f7f7f5;--surface-0:#f0efea;
+  --text-primary:#1a1a19;--text-secondary:#6b6b68;--text-muted:#9a9a96;
+  --border:#e4e3de;--border-strong:#c9c8c2;--border-accent:#a9c9ef;
+  --text-accent:#0c66c2;--bg-accent:#e6f1fb;--text-success:#1a7f45;
+  --radius:8px;--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --surface-2:#1f1f1e;--surface-1:#262625;--surface-0:#171716;
+  --text-primary:#ededeb;--text-secondary:#a3a39e;--text-muted:#6f6f6b;
+  --border:#38383600;--border:#383836;--border-strong:#4a4a47;--border-accent:#2b4a6e;
+  --text-accent:#78b6f5;--bg-accent:#12263b;--text-success:#4ec27f;
+}}
+body{margin:0;padding:32px;background:var(--surface-0);color:var(--text-primary);font-family:var(--font-sans);line-height:1.6}
+.page{max-width:900px;margin:0 auto}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+.sub{color:var(--text-secondary);margin:0 0 28px}
+.gwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;padding:8px 0}
+.glab{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.gchip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--bg-accent);color:var(--text-accent)}
+.win{border:1px solid var(--border);border-radius:12px;background:var(--surface-2);overflow:hidden}
+.bar{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--surface-1)}
+.dot{width:11px;height:11px;border-radius:999px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;font-size:13px;color:var(--text-primary)}
+.sep{height:1px;background:var(--border);margin:4px 0}
+.muted{color:var(--text-secondary);font-size:12px}
+.tag{font-size:11px;color:var(--text-secondary);padding:6px 12px 2px;text-transform:uppercase;letter-spacing:.04em}
+.btn{font-size:12px;padding:4px 10px;border-radius:var(--radius);background:var(--bg-accent);color:var(--text-accent);border:1px solid var(--border-accent);white-space:nowrap}
+.btnp{background:var(--text-accent);color:var(--surface-2);border:none}
+.sw{width:32px;height:18px;border-radius:999px;background:var(--border-strong);position:relative;flex:none}
+.sw.on{background:var(--text-accent)}
+.knob{width:14px;height:14px;border-radius:999px;background:var(--surface-2);position:absolute;top:2px;left:2px}
+.sw.on .knob{left:16px}
+.ok{color:var(--text-success)}
+.field{padding:8px 12px}
+.field label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px}
+.inp{border:1px solid var(--border);border-radius:var(--radius);padding:5px 8px;font-size:13px;color:var(--text-primary);background:var(--surface-2);width:90px;font-family:var(--font-mono)}
+.tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.tab{font-size:12px;padding:4px 10px;border-radius:var(--radius);color:var(--text-secondary)}
+.tab.sel{background:var(--bg-accent);color:var(--text-accent)}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>humans.sh — native app GUI surfaces</h1>
+<p class="sub">The companion TUI holds the message/session workflow. The native menu-bar app ships only these three surfaces — forms and status, no product UI.</p>
+<div class="gwrap">
+
+  <div>
+    <div class="glab"><strong>Menu-bar dropdown</strong><span class="gchip">daily</span></div>
+    <div class="bar" style="justify-content:flex-end;gap:14px;color:var(--text-secondary)">
+      <i class="ti ti-wifi" aria-hidden="true"></i>
+      <i class="ti ti-battery-2" aria-hidden="true"></i>
+      <span style="color:var(--text-accent)"><i class="ti ti-message-2" aria-hidden="true"></i></span>
+      <span style="font-size:12px">9:41</span>
+    </div>
+    <div class="win" style="border-top-left-radius:0;border-top-right-radius:0">
+      <div class="row"><span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:var(--text-success)"></span>Server running</span><span class="muted">:4317</span></div>
+      <div class="sep"></div>
+      <div class="row"><span><i class="ti ti-external-link" aria-hidden="true"></i> Open TUI</span></div>
+      <div class="row"><span><i class="ti ti-player-stop" aria-hidden="true"></i> Stop server</span></div>
+      <div class="sep"></div>
+      <div class="tag">Active sessions</div>
+      <div class="row"><span>effect-3f2a</span><span class="muted">working</span></div>
+      <div class="row"><span>opentui-9c1b</span><span class="ok">needs you</span></div>
+      <div class="sep"></div>
+      <div class="row"><span>Mute notifications</span><span class="sw"><span class="knob"></span></span></div>
+      <div class="sep"></div>
+      <div class="row"><span>Preferences…</span></div>
+      <div class="row"><span>Quit</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="glab"><strong>Onboarding window</strong><span class="gchip">first-run only</span></div>
+    <div class="win">
+      <div class="bar">
+        <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+        <span class="muted" style="margin-left:6px">Welcome</span>
+      </div>
+      <div style="padding:12px 12px 4px"><strong style="font-size:14px">Set up humans.sh</strong><div class="muted" style="margin-top:2px">Three things and you're live.</div></div>
+      <div class="row"><span><i class="ti ti-bell" aria-hidden="true"></i> Notifications</span><span class="btn">Grant</span></div>
+      <div class="row"><span><i class="ti ti-plug" aria-hidden="true"></i> Claude Code plugin</span><span class="btn">Install</span></div>
+      <div class="row"><span><i class="ti ti-terminal-2" aria-hidden="true"></i> MCP endpoint</span><span class="btn"><i class="ti ti-copy" aria-hidden="true"></i> copy</span></div>
+      <div class="row"><span><i class="ti ti-server" aria-hidden="true"></i> Server started</span><span class="ok"><i class="ti ti-check" aria-hidden="true"></i></span></div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end;padding:10px 12px"><span class="btn btnp">Continue</span></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="glab"><strong>Settings window</strong><span class="gchip">occasional</span></div>
+    <div class="win">
+      <div class="bar">
+        <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+        <span class="muted" style="margin-left:6px">Settings</span>
+      </div>
+      <div class="tabs"><span class="tab sel">General</span><span class="tab">Notifications</span><span class="tab">Advanced</span></div>
+      <div class="field"><label>Server port</label><input class="inp" value="4317" readonly></div>
+      <div class="row"><span>Launch at login</span><span class="sw on"><span class="knob"></span></span></div>
+      <div class="row"><span>Notification sound</span><span class="sw on"><span class="knob"></span></span></div>
+      <div class="row"><span>Only when TUI unfocused</span><span class="sw on"><span class="knob"></span></span></div>
+      <div class="row"><span>Quiet hours</span><span class="sw"><span class="knob"></span></span></div>
+      <div class="sep"></div>
+      <div class="row"><span><i class="ti ti-refresh" aria-hidden="true"></i> Re-register plugin &amp; MCP</span></div>
+    </div>
+  </div>
+
+</div>
+</div>
+</body>
+</html>
