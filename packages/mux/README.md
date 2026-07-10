@@ -21,9 +21,10 @@ and opens sessions in place in whatever terminal you use.
   on screen — mux becomes a window manager across your terminal windows
   (they can even be different apps: one iTerm, one Ghostty). There is one
   target at a time; registering a second offers to kill the first or abort.
-  On open, mux tries to focus the target's window (xterm raise sequence, plus
-  AppleScript on macOS — iTerm gets exact-tab selection via its tty; the first
-  focus prompts for Automation permission).
+  On open, mux focuses the target's window (xterm raise sequence, plus
+  AppleScript on macOS — iTerm and Ghostty get exact tab/window selection,
+  even when the picker is in the same app; other terminals get app-level
+  activation. The first focus prompts for Automation permission).
 
 Sessions with multiple windows show them as an indented tree; a window's pane
 splits are preserved exactly as laid out. While typing, matches flatten into

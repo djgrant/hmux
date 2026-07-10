@@ -162,7 +162,7 @@ export class TmuxBackend implements Backend {
   async openInClient(target: string, client: DisplayTarget): Promise<void> {
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
     await tmux(["switch-client", "-c", client.tty, "-t", target.split(":")[0]])
-    focusTarget(client)
+    focusTarget(client).catch(() => {}) // fire-and-forget: focus never blocks or fails the open
   }
 
   async create(name: string): Promise<void> {
