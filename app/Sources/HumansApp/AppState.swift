@@ -151,7 +151,54 @@ final class AppState: ObservableObject {
     // MARK: - Actions
 
     func openTui() {
-        runShell(settings.openTuiCommand)
+        let custom = settings.openTuiCommand.trimmingCharacters(in: .whitespaces)
+        if !custom.isEmpty {
+            runShell(custom)
+            return
+        }
+        launchTuiInTerminal()
+    }
+
+    // Default "Open TUI": actually run the TUI, in the user's terminal — an
+    // empty terminal window is not the product. Prefers iTerm when installed.
+    private func launchTuiInTerminal() {
+        guard !settings.repoPath.isEmpty else {
+            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+            return
+        }
+        let cmd = "cd \(settings.repoPath)/packages/tui && exec bun run src/index.tsx"
+        let script: String
+        if FileManager.default.fileExists(atPath: "/Applications/iTerm.app") {
+            // `create window … command "…"` does not shell-parse its string, so
+            // type the command into a fresh window's shell instead.
+            script = """
+            tell application "iTerm"
+                activate
+                set w to (create window with default profile)
+                tell current session of w to write text \(appleScriptQuoted(cmd))
+            end tell
+            """
+        } else {
+            script = """
+            tell application "Terminal"
+                activate
+                do script \(appleScriptQuoted(cmd))
+            end tell
+            """
+        }
+        var error: NSDictionary?
+        NSAppleScript(source: script)?.executeAndReturnError(&error)
+        if let error {
+            NSLog("humans.sh: open TUI failed: \(error)")
+        }
+    }
+
+    // Quote a string for embedding in an AppleScript source literal.
+    private func appleScriptQuoted(_ s: String) -> String {
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     func copyMcpEndpoint() {

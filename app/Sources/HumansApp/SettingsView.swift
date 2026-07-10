@@ -69,7 +69,7 @@ struct SettingsView: View {
                 }
             }
             LabeledContent("Open-TUI command") {
-                TextField("open -a Terminal", text: $settings.openTuiCommand)
+                TextField("auto — run the TUI in iTerm/Terminal", text: $settings.openTuiCommand)
             }
             Button("Re-register plugin & MCP") {
                 state.copyMcpRegisterCommand()

@@ -18,9 +18,9 @@ final class AppSettings: ObservableObject {
     // and the TUI. Chosen once during onboarding.
     @AppStorage("repoPath") var repoPath: String = ""
 
-    // Command run when the user clicks a notification or "Open TUI". Defaults to
-    // opening the terminal; the human's own tmux/pok setup takes it from there.
-    @AppStorage("openTuiCommand") var openTuiCommand: String = "open -a Terminal"
+    // Command run when the user clicks a notification or "Open TUI". Empty
+    // means auto: launch the TUI from the repo in iTerm (or Terminal).
+    @AppStorage("openTuiCommand") var openTuiCommand: String = ""
 
     var mcpEndpoint: String { "http://localhost:\(port)\(mcpPath)" }
     var wsURL: URL { URL(string: "ws://localhost:\(port)\(wsPath)")! }

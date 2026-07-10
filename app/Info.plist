@@ -21,6 +21,10 @@
     <!-- Menu-bar agent: no Dock icon, no main window on launch. -->
     <key>LSUIElement</key>
     <true/>
+    <!-- "Open TUI" drives iTerm/Terminal via Apple events; without this key
+         macOS denies them silently instead of prompting. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>humans.sh opens the TUI in your terminal when you click a notification or “Open TUI”.</string>
     <key>NSHumanReadableCopyright</key>
     <string>humans.sh</string>
 </dict>

@@ -54,6 +54,7 @@ printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
 echo "› codesign ($SIGN_IDENTITY)"
 codesign --force --deep --options runtime \
+    --entitlements Entitlements.plist \
     --sign "$SIGN_IDENTITY" \
     --identifier sh.humans.app \
     "$BUNDLE"
