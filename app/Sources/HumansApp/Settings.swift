@@ -23,17 +23,25 @@ final class AppSettings: ObservableObject {
     // and editable in Settings › Advanced.
     @AppStorage("openTuiCommand") var openTuiCommand: String = ""
 
-    // Launch the TUI in a fresh iTerm window (Terminal fallback). iTerm's
-    // `command` parameter doesn't shell-parse, hence `write text`.
+    // Open-or-focus: the script focuses a running TUI's terminal window (via
+    // @humans/focus) or launches one in a new window if none is alive. The
+    // terminal-specific logic lives in JS, shared with the mux work.
     var defaultOpenTuiCommand: String {
+        "bun \(repoPath)/packages/tui/src/open.ts"
+    }
+
+    // What defaultOpenTuiCommand produced before open.ts existed, so prefill
+    // can recognize an untouched setting and migrate it. A user-edited
+    // command won't match and is left alone.
+    var legacyOpenTuiCommands: [String] {
         let run = "cd \(repoPath)/packages/tui && exec bun run src/index.tsx"
-        if FileManager.default.fileExists(atPath: "/Applications/iTerm.app") {
-            return "osascript -e 'tell application \"iTerm\" to activate' "
+        return [
+            "osascript -e 'tell application \"iTerm\" to activate' "
                 + "-e 'tell application \"iTerm\" to tell current session of "
-                + "(create window with default profile) to write text \"\(run)\"'"
-        }
-        return "osascript -e 'tell application \"Terminal\" to activate' "
-            + "-e 'tell application \"Terminal\" to do script \"\(run)\"'"
+                + "(create window with default profile) to write text \"\(run)\"'",
+            "osascript -e 'tell application \"Terminal\" to activate' "
+                + "-e 'tell application \"Terminal\" to do script \"\(run)\"'"
+        ]
     }
 
     var mcpEndpoint: String { "http://localhost:\(port)\(mcpPath)" }

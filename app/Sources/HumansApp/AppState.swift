@@ -167,11 +167,14 @@ final class AppState: ObservableObject {
 
     // Fill openTuiCommand with the concrete default once the repo path exists,
     // so Settings always shows the real, editable command — no hidden "auto".
+    // An untouched old default (pre-open.ts AppleScript) migrates to the new
+    // one; anything user-edited is left alone.
     private func prefillOpenTuiCommandIfNeeded() {
-        guard !settings.repoPath.isEmpty,
-              settings.openTuiCommand.trimmingCharacters(in: .whitespaces).isEmpty
-        else { return }
-        settings.openTuiCommand = settings.defaultOpenTuiCommand
+        guard !settings.repoPath.isEmpty else { return }
+        let current = settings.openTuiCommand.trimmingCharacters(in: .whitespaces)
+        if current.isEmpty || settings.legacyOpenTuiCommands.contains(current) {
+            settings.openTuiCommand = settings.defaultOpenTuiCommand
+        }
     }
 
     func copyMcpEndpoint() {

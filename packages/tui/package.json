@@ -10,6 +10,7 @@
     "@humans/protocol": "workspace:*",
     "@opentui/core": "^0.4.3",
     "@opentui/solid": "^0.4.3",
-    "solid-js": "^1.9.0"
+    "solid-js": "^1.9.0",
+    "@humans/focus": "workspace:*"
   }
 }

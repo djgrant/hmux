@@ -9,6 +9,7 @@ import { addMessage, applyInit, announceIncoming, loadDrafts, markAnswered, setC
 import { App } from "./App"
 import { MAIN_BG } from "./theme"
 import { applyTmuxNotificationOverride } from "./notify"
+import { announcePresence } from "./presence"
 
 // The TUI is full-screen and sizes itself from STDOUT: when stdout is a pipe
 // (log-piping dev runners, `| tee`, CI), OpenTUI silently falls back to
@@ -30,6 +31,10 @@ if (!process.stdout.isTTY) {
 // the renderer, which snapshots the env. Requires `allow-passthrough on` in
 // tmux ≥ 3.3 for the wrapped OSC to reach the outer terminal.
 applyTmuxNotificationOverride()
+
+// Record tty/program/pid so `open.ts` can focus this window instead of
+// spawning another TUI.
+announcePresence()
 
 // Restore drafts persisted at ~/.humans/drafts.json (HUMANS_DRAFTS_PATH to
 // override) and enable the debounced write-behind.
