@@ -16,7 +16,7 @@ Or from anything that can run a shell:
 humans-focus /dev/ttys012 iTerm.app
 ```
 
-A terminal identifies itself from the inside: the `tty` command reports its tty, and the `TERM_PROGRAM` environment variable names its program.
+A process running in the target terminal can read both values: the `tty` command prints the tty, and the `TERM_PROGRAM` environment variable names the program.
 
 ## How it works
 
