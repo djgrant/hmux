@@ -108,6 +108,17 @@ export function updateQuery(next: string) {
   setSelected(0)
 }
 
+/**
+ * Clear the typeahead and leave the cursor on `target` in the reset tree.
+ * Called after entering a session: the filter starts fresh but the session
+ * you just opened stays highlighted so you land back where you were.
+ */
+export function selectTarget(target: string) {
+  setQuery("")
+  const i = rows().findIndex((r) => r.target === target)
+  setSelected(i < 0 ? 0 : i)
+}
+
 let backend: Backend | undefined
 let generation = 0
 

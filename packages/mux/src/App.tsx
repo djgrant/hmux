@@ -10,6 +10,7 @@ import {
   rows,
   selected,
   selectedRow,
+  selectTarget,
   setMode,
   setSelected,
   startPolling,
@@ -41,6 +42,9 @@ export function App(props: {
   })
 
   const open = async (target: string) => {
+    // Entering a session clears the typeahead but leaves the cursor on the
+    // session just opened, so the picker lands back where you were.
+    selectTarget(target)
     // A live display target (another terminal running `mux target`) takes
     // priority: load the session there, the picker stays on screen.
     const targets = await props.backend.targets()
@@ -103,7 +107,10 @@ export function App(props: {
       key.preventDefault()
       open(row.target)
     } else if (key.name === "escape") {
-      updateQuery("")
+      // Clearing the filter keeps the cursor on the current row rather than
+      // snapping back to the top of the reset tree.
+      if (row) selectTarget(row.target)
+      else updateQuery("")
     } else if (key.name === "backspace") {
       updateQuery(query().slice(0, -1))
     } else if (key.ctrl && key.name === "n") {
