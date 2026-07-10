@@ -44,6 +44,21 @@ final class Notifications: NSObject, UNUserNotificationCenterDelegate {
         center.add(request)
     }
 
+    // Drop delivered banners whose message is no longer pending. Requests are
+    // keyed by message id, so the pending set is the full source of truth —
+    // reconciling on every pending-list change (including the initial snapshot
+    // on connect) also clears ghosts from answers that happened while the app
+    // was offline.
+    func reconcile(pendingIds: Set<String>) {
+        let center = self.center
+        center.getDeliveredNotifications { delivered in
+            let stale = delivered.map(\.request.identifier).filter { !pendingIds.contains($0) }
+            if !stale.isEmpty {
+                center.removeDeliveredNotifications(withIdentifiers: stale)
+            }
+        }
+    }
+
     // Tapping a notification focuses the session by running the open-TUI command.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,

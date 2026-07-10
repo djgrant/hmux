@@ -48,7 +48,13 @@ final class AppState: ObservableObject {
             Task { @MainActor in self?.handleNewMessage(message) }
         }
         connection.onPendingMessages = { [weak self] pending in
-            Task { @MainActor in self?.pendingMessages = pending }
+            Task { @MainActor in
+                guard let self else { return }
+                self.pendingMessages = pending
+                // Answered messages must take their Notification Center banner
+                // with them, or it lingers as a ghost pointing at nothing.
+                self.notifications.reconcile(pendingIds: Set(pending.map(\.id)))
+            }
         }
 
         server.onStateChange = { [weak self] in
