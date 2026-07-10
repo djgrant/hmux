@@ -31,6 +31,8 @@ interface PaneRow {
   windowName: string
   paneActive: boolean
   currentPath: string
+  command: string
+  agent: string | null
   status: string | null
   detail: string | null
 }
@@ -54,11 +56,11 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{pane_current_command}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, paneActive, currentPath, status, detail] =
+        const [session, windowIndex, windowName, paneActive, currentPath, command, agent, status, detail] =
           line.split(SEP)
         const rows = panesBySession.get(session) ?? []
         rows.push({
@@ -67,6 +69,8 @@ export class TmuxBackend implements Backend {
           windowName: sanitize(windowName),
           paneActive: paneActive === "1",
           currentPath,
+          command: sanitize(command),
+          agent: agent ? sanitize(agent) : null,
           status: status ? sanitize(status) : null,
           detail: detail ? sanitize(detail) : null,
         })
@@ -90,11 +94,17 @@ export class TmuxBackend implements Backend {
       const windows: WindowEntry[] = []
       for (const [index, wPanes] of byIndex) {
         const active = wPanes.find((p) => p.paneActive) ?? wPanes[0]
+        // Agent identity from whichever pane advertised one — a cc session
+        // is usually not the active pane while you look at the dashboard.
+        const agent = wPanes.find((p) => p.agent)?.agent ?? null
         windows.push({
           target: `${name}:${index}`,
           session: name,
           name: active.windowName,
           dir: tilde(active.currentPath),
+          agent,
+          command: active.command || null,
+          paneCount: wPanes.length,
           ...topStatus(wPanes),
         })
       }

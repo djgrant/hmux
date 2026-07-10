@@ -73,6 +73,31 @@ interface SessionInfo {
   project?: string
 }
 
+/**
+ * Advertise into tmux pane user options (the mux advertise protocol) — the
+ * hook runs inside the pane, so $TMUX_PANE identifies it exactly. This is a
+ * second, server-independent signal plane: mux reads it straight off tmux.
+ * Status semantics here are mux's ("who needs me"), not the roster's — a
+ * finished turn is `waiting`, not `idle`. Failure-silent like everything else.
+ */
+const advertise = (status: string | null, detail?: string, agent?: string | null) => {
+  const pane = process.env.TMUX_PANE
+  if (!pane) return
+  const set = (option: string, value: string | null | undefined) => {
+    try {
+      if (value === undefined) return
+      const args =
+        value === null
+          ? ["set-option", "-pu", "-t", pane, option]
+          : ["set-option", "-p", "-t", pane, option, value]
+      Bun.spawnSync(["tmux", ...args], { stdout: "ignore", stderr: "ignore" })
+    } catch {}
+  }
+  set("@humans_status", status)
+  set("@humans_detail", detail === undefined ? null : detail)
+  if (agent !== undefined) set("@humans_agent", agent)
+}
+
 const request = async (path: string, init?: RequestInit): Promise<Response> =>
   fetch(`${BASE}${path}`, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
@@ -146,6 +171,7 @@ const main = async () => {
       // Fresh conversation: whatever context an earlier run injected is gone,
       // so clear the marker and let the next bound check re-inject.
       clearMarker(id)
+      advertise("busy", undefined, [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "))
       await post("/sessions/register", {
         id,
         ...(dirname !== undefined ? { agent: `${dirname}-${id.slice(0, 4)}` } : {}),
@@ -155,6 +181,7 @@ const main = async () => {
       return
     }
     case "UserPromptSubmit": {
+      advertise("busy")
       await post(`/sessions/${encoded}/status`, { status: "working" })
       const session = await getSessionInfo(encoded)
       if (!session) return
@@ -175,6 +202,7 @@ const main = async () => {
     }
     case "PostToolUse": {
       // Heartbeat: the agent just used a tool, so it is alive and working.
+      advertise("busy")
       await post(`/sessions/${encoded}/status`, { status: "working" })
       // Mid-task bind: if the human bound this session after the prompt was
       // submitted, inject the bound context here — once (marker-guarded),
@@ -199,6 +227,9 @@ const main = async () => {
       return
     }
     case "Stop":
+      // Roster semantics: idle. mux semantics: the turn ended, a human is
+      // needed to move things forward.
+      advertise("waiting", "awaiting your reply")
       await post(`/sessions/${encoded}/status`, { status: "idle" })
       return
     case "Notification": {
@@ -211,17 +242,20 @@ const main = async () => {
       const text = typeof input.message === "string" ? input.message : ""
       if (/permission/i.test(text)) {
         // The notification text rides along as the roster "blocked" label.
+        advertise("waiting", text.trim().slice(0, 200))
         await post(`/sessions/${encoded}/status`, {
           status: "needs-attention",
           detail: text.trim().slice(0, 200)
         })
       } else if (/waiting for your input/i.test(text)) {
+        advertise("waiting", "waiting for your input")
         await post(`/sessions/${encoded}/status`, { status: "idle" })
       }
       return
     }
     case "SessionEnd":
       clearMarker(id)
+      advertise(null, undefined, null)
       await post(`/sessions/${encoded}/end`)
       return
     default:

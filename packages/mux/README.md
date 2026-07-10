@@ -47,23 +47,18 @@ tmux set-option -pu @humans_detail
   tolerated; unknown values render dim).
 - `@humans_detail` — optional one-line human-readable context. Control
   characters are stripped at ingress.
+- `@humans_agent` — optional identity of the agent in the pane (e.g.
+  "api-3f2c · sonnet"), shown as row metadata and searchable in typeahead.
 - `-p` (pane-level) means the advertiser needs no knowledge of its session
   name, and the state dies with the pane.
 
-### Claude Code example
+### Claude Code
 
-Hooks that badge the session whenever Claude is waiting for input and clear
-it when work resumes (`~/.claude/settings.json`):
-
-```json
-{
-  "hooks": {
-    "Notification": [{ "hooks": [{ "type": "command", "command": "[ -n \"$TMUX\" ] && tmux set-option -p @humans_status waiting; :" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "[ -n \"$TMUX\" ] && tmux set-option -p @humans_status waiting && tmux set-option -p @humans_detail \"claude finished — awaiting you\"; :" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "[ -n \"$TMUX\" ] && tmux set-option -p @humans_status busy && tmux set-option -pu @humans_detail; :" }] }]
-  }
-}
-```
+[@humans/cc-plugin](../cc-plugin) advertises automatically: sessions appear
+with their agent identity and model, turn `busy` while working, and `waiting`
+(with the reason — permission prompt, awaiting reply) whenever a human is
+needed. This works even with no humans.sh server running; the tmux options
+are a second, server-independent signal plane.
 
 ## Development
 

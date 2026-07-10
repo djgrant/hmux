@@ -150,6 +150,9 @@ export function App(props: {
                       {indent() + statusGlyph(row.status, row.attached) + " "}
                     </span>
                     {label()}
+                    <Show when={row.meta}>
+                      <span style={{ fg: isSelected() ? BODY : DIM }}>{"  " + row.meta}</span>
+                    </Show>
                     <span style={{ fg: isSelected() ? DIM : FAINT }}>{"  " + row.dir}</span>
                     <Show when={row.detail}>
                       <span style={{ fg: statusColor(row.status) }}>{"  " + row.detail}</span>

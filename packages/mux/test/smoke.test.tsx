@@ -25,8 +25,8 @@ function seed() {
       status: "waiting",
       detail: "approve the plan?",
       windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", status: "waiting", detail: "approve the plan?" },
-        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", status: "busy", detail: null },
+        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", command: "claude", paneCount: 2, status: "waiting", detail: "approve the plan?" },
+        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, command: "bun", paneCount: 1, status: "busy", detail: null },
       ],
     },
     {
@@ -36,7 +36,7 @@ function seed() {
       attached: false,
       status: null,
       detail: null,
-      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", status: null, detail: null }],
+      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, command: "zsh", paneCount: 1, status: null, detail: null }],
     },
   ])
   updateQuery("")
@@ -63,6 +63,10 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   expect(frame).toContain("approve the plan?")
   expect(frame).toContain("~/Repos/api")
   expect(frame).toContain("prefix d returns here")
+  // Window meta: advertised agent identity + pane count; single-window
+  // sessions carry their window meta up to the collapsed header row.
+  expect(frame).toContain("api-3f2c · sonnet")
+  expect(frame).toContain("2 panes")
 
   // Typeahead flattens to ranked windows: "cl" matches api's claude window.
   setup.mockInput.typeText("cl")
