@@ -16,7 +16,7 @@ Or from anything that can run a shell:
 humans-focus /dev/ttys012 iTerm.app
 ```
 
-`program` is the target terminal's `TERM_PROGRAM`. Capture it inside the terminal that will later be focused, alongside its `tty`.
+Both values come from inside the target terminal: `tty` is what the `tty` command reports there, and `program` is its `TERM_PROGRAM`.
 
 ## How it works
 
