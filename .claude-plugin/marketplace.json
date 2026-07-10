@@ -1,0 +1,11 @@
+{
+  "name": "humans-sh",
+  "owner": { "name": "djgrant" },
+  "plugins": [
+    {
+      "name": "humans",
+      "source": "./packages/cc-plugin",
+      "description": "Session presence and human-in-the-loop inbox for Claude Code via a local humans.sh server"
+    }
+  ]
+}
