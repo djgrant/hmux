@@ -16,6 +16,7 @@ final class AppState: ObservableObject {
     @Published var serverRunning = false
     @Published var connected = false
     @Published var sessions: [Session] = []
+    @Published var pendingMessages: [Message] = []
     @Published var notificationsAuthorized = false
     @Published var notificationsDenied = false
 
@@ -24,7 +25,7 @@ final class AppState: ObservableObject {
     private var runningPort: Int?
 
     var needsAttentionCount: Int {
-        sessions.filter { $0.status == .needsAttention }.count
+        pendingMessages.count
     }
 
     init() {
@@ -45,6 +46,9 @@ final class AppState: ObservableObject {
         }
         connection.onNewMessage = { [weak self] message in
             Task { @MainActor in self?.handleNewMessage(message) }
+        }
+        connection.onPendingMessages = { [weak self] pending in
+            Task { @MainActor in self?.pendingMessages = pending }
         }
 
         server.onStateChange = { [weak self] in

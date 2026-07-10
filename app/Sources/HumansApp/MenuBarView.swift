@@ -28,7 +28,7 @@ struct MenuBarView: View {
 
             Divider().padding(.vertical, 4)
 
-            sessionsSection
+            pendingSection
 
             MenuRow(action: { settings.muted.toggle() }) {
                 Label("Mute notifications", systemImage: settings.muted ? "bell.slash" : "bell")
@@ -100,33 +100,40 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder
-    private var sessionsSection: some View {
-        Text("Active sessions")
+    private var pendingSection: some View {
+        Text("Waiting on you")
             .font(.caption)
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .padding(.horizontal, 8)
             .padding(.top, 2)
 
-        if state.sessions.isEmpty {
-            Text(state.connected ? "None yet" : "Server offline")
+        if state.pendingMessages.isEmpty {
+            Text(state.connected ? "Nothing pending" : "Server offline")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         } else {
-            ForEach(state.sessions) { session in
-                HStack {
-                    Text(session.agent)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(session.detail ?? session.status.label)
-                        .font(.caption)
-                        .foregroundStyle(session.status == .needsAttention ? Color.green : .secondary)
-                        .lineLimit(1)
+            ForEach(state.pendingMessages.prefix(3)) { message in
+                MenuRow(action: { state.openTui() }) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(message.agent)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Text(message.body)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
+            }
+            if state.pendingMessages.count > 3 {
+                Text("+ \(state.pendingMessages.count - 3) more in the TUI")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
             }
         }
         Divider().padding(.vertical, 4)

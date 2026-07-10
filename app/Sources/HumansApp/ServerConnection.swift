@@ -15,8 +15,10 @@ final class ServerConnection: NSObject {
     var onDisconnected: (() -> Void)?
     var onSessions: (([Session]) -> Void)?
     var onNewMessage: ((Message) -> Void)?
+    var onPendingMessages: (([Message]) -> Void)?
 
     private var sessions: [String: Session] = [:]
+    private var messages: [String: Message] = [:]
 
     init(url: URL) {
         self.url = url
@@ -92,19 +94,37 @@ final class ServerConnection: NSObject {
         switch event {
         case .initial(let messages, let sessions):
             self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+            self.messages = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
             emitSessions()
-            // Don't notify for the backlog delivered on connect.
-            _ = messages
+            emitPending()
+            // Don't post native notifications for the backlog delivered on
+            // connect — it still shows in the menu's pending list.
         case .sessionUpdated(let s):
             sessions[s.id] = s
             emitSessions()
         case .messageNew(let m):
+            messages[m.id] = m
+            emitPending()
             if m.status == .pending && (m.kind == .ask || m.kind == .approval) {
                 onNewMessage?(m)
             }
-        case .messageAnswered:
-            break
+        case .messageAnswered(let id, let answer, let answeredAt):
+            if var m = messages[id] {
+                m = Message(id: m.id, kind: m.kind, agent: m.agent, project: m.project,
+                            body: m.body, context: m.context, suggestion: m.suggestion,
+                            status: .answered, answer: answer,
+                            createdAt: m.createdAt, answeredAt: answeredAt)
+                messages[id] = m
+            }
+            emitPending()
         }
+    }
+
+    private func emitPending() {
+        let pending = messages.values
+            .filter { $0.status == .pending }
+            .sorted { $0.createdAt > $1.createdAt }
+        onPendingMessages?(pending)
     }
 
     private func emitSessions() {
