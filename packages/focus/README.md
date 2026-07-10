@@ -18,18 +18,11 @@ humans-focus /dev/ttys012 iTerm.app
 
 ## How it works
 
-No macOS API focuses "the tab attached to this tty". Asking apps for their ttys is unreliable too: pty-nesting wrappers (kiro, `script`, anything that re-terms a shell) give the inner process a different tty from the one the terminal app knows about.
+A marker title is written to the tty (`OSC 0`), the tab now bearing that title is selected through the app's scripting interface, and the marker is cleared. Matching on the title rather than the tty is what makes this reliable: pty-nesting wrappers (kiro, `script`) give the inner process a different tty from the one the terminal app reports, but a title written to either arrives at the same tab.
 
-Instead, the terminal is made to identify itself:
+The marker embeds the tty, so a title collision can only cause a missed focus, never a wrong tab. A short delay (350ms) sits between stamp and select, giving the title time to land and any in-flight redraw (a tmux `switch-client`, say) time to finish painting.
 
-1. A unique marker title is written through the tty (`OSC 0`). A terminal has to forward output to be a terminal, so the stamp survives any wrapper in between.
-2. A short settle delay lets the title land. It also lets whatever just redrew the terminal (a tmux `switch-client`, say) finish painting before the tab comes forward.
-3. The tab whose title contains the marker is found via the app's scripting interface and selected.
-4. The stamp is cleared and the terminal reverts to its automatic title.
-
-Matching is by containment because some apps decorate titles (iTerm appends "(tmux)"). The marker embeds the tty, so a title collision can only cause a missed focus, not a wrong tab.
-
-Before any of that, an xterm raise sequence (`ESC [ 5 t`) is written to the tty. It costs nothing, and some emulators honour it when their preferences allow.
+An xterm raise sequence (`ESC [ 5 t`) is written first. It costs nothing, and some emulators honour it directly.
 
 ## Supported terminals
 
