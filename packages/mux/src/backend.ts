@@ -16,6 +16,8 @@ export interface WindowEntry {
   dir: string
   /** Advertised agent identity (e.g. "api-3f2c · sonnet") when a cc session runs here. */
   agent: string | null
+  /** Currently selected window within its session. */
+  active: boolean
   paneCount: number
   /** Advertised state rolled up from the window's panes. */
   status: Status | null

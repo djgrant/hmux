@@ -95,15 +95,26 @@ export function selectedRow(): Row | undefined {
   return rows()[selected()]
 }
 
+/**
+ * Parked: the user hasn't moved the cursor or typed since the picker (re)set
+ * it. While parked, refresh() lets the cursor follow the attached session's
+ * active window — tab back to the picker and it sits on where you just were.
+ * The first arrow key or typed character unparks it; browsing is never
+ * yanked out from under you by a window switch elsewhere.
+ */
+let parked = true
+
 export function moveSelection(delta: number) {
   const n = rows().length
   if (n === 0) return
+  parked = false
   setSelected(((selected() + delta) % n + n) % n)
 }
 
 export function updateQuery(next: string) {
   // A query never starts with whitespace: a stray space would match every
   // entry and flatten the whole tree for nothing.
+  parked = false
   setQuery(next.trimStart())
   setSelected(0)
 }
@@ -114,8 +125,16 @@ export function updateQuery(next: string) {
  * you just opened stays highlighted so you land back where you were.
  */
 export function selectTarget(target: string) {
+  // Capture the session before clearing the query: while typing, rows are
+  // flattened window rows (target `name:index`), but the reset tree collapses
+  // a single-window session to just its header (target `name`). Matching the
+  // window target alone would miss and snap the cursor back to the top.
+  const session = rows().find((r) => r.target === target)?.session
   setQuery("")
-  const i = rows().findIndex((r) => r.target === target)
+  parked = true // opening re-parks the cursor: it may follow the live window again
+  const reset = rows()
+  let i = reset.findIndex((r) => r.target === target)
+  if (i < 0 && session) i = reset.findIndex((r) => r.session === session)
   setSelected(i < 0 ? 0 : i)
 }
 
@@ -133,6 +152,22 @@ export async function refresh() {
   if (gen !== generation) return // a newer poll superseded this one
   setGroups(list)
   if (selected() >= rows().length) setSelected(Math.max(0, rows().length - 1))
+  followActiveWindow()
+}
+
+/**
+ * While parked (and not filtering), keep the cursor on the attached session's
+ * active window — a window switch inside the live session propagates here.
+ * A collapsed single-window session parks on the session header instead.
+ */
+function followActiveWindow() {
+  if (!parked || query().length > 0) return
+  const g = groups().find((s) => s.attached)
+  if (!g) return
+  const w = g.windows.find((win) => win.active)
+  const target = g.windows.length > 1 && w ? w.target : g.target
+  const i = rows().findIndex((r) => r.target === target)
+  if (i >= 0) setSelected(i)
 }
 
 export function startPolling(intervalMs = 1000): () => void {

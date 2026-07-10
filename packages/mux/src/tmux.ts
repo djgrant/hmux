@@ -31,6 +31,7 @@ interface PaneRow {
   session: string
   windowIndex: string
   windowName: string
+  windowActive: boolean
   paneActive: boolean
   currentPath: string
   agent: string | null
@@ -84,17 +85,18 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, paneActive, currentPath, agent, status, detail] =
+        const [session, windowIndex, windowName, windowActive, paneActive, currentPath, agent, status, detail] =
           line.split(SEP)
         const rows = panesBySession.get(session) ?? []
         rows.push({
           session,
           windowIndex,
           windowName: sanitize(windowName),
+          windowActive: windowActive === "1",
           paneActive: paneActive === "1",
           currentPath,
           agent: agent ? sanitize(agent) : null,
@@ -131,6 +133,7 @@ export class TmuxBackend implements Backend {
           name: active.windowName,
           dir: tilde(active.currentPath),
           agent,
+          active: active.windowActive,
           paneCount: wPanes.length,
           ...topStatus(wPanes),
         })

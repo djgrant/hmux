@@ -1,8 +1,8 @@
 import { test, expect } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { App } from "../src/App"
-import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzyScore } from "../src/store"
-import type { Backend, DisplayTarget } from "../src/backend"
+import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzyScore, selectTarget, moveSelection, setBackend, refresh } from "../src/store"
+import type { Backend, DisplayTarget, SessionGroup } from "../src/backend"
 
 const opened: string[] = []
 const openedInClient: Array<[string, string]> = []
@@ -33,8 +33,8 @@ function seed() {
       status: "waiting",
       detail: "approve the plan?",
       windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", paneCount: 2, status: "waiting", detail: "approve the plan?" },
-        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, paneCount: 1, status: "busy", detail: null },
+        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, paneCount: 2, status: "waiting", detail: "approve the plan?" },
+        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, active: false, paneCount: 1, status: "busy", detail: null },
       ],
     },
     {
@@ -44,7 +44,7 @@ function seed() {
       attached: false,
       status: null,
       detail: null,
-      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, paneCount: 1, status: null, detail: null }],
+      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, active: true, paneCount: 1, status: null, detail: null }],
     },
   ])
   updateQuery("")
@@ -98,15 +98,17 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   expect(opened).toEqual(["api:1"]) // unchanged
   liveTargets = []
 
-  // Escape clears the query; tree view restores.
+  // Escape clears the query; tree view restores. The cursor stays on the
+  // session that was open (api:1), it does not snap back to the top.
   setup.mockInput.pressEscape()
   await settle()
   expect(rows().length).toBe(4)
+  expect(selectedRow()?.target).toBe("api:1")
 
   // Arrow selection + ctrl+x kill confirm flow.
   setup.mockInput.pressArrow("down")
   await settle()
-  expect(selectedRow()?.target).toBe("api:1")
+  expect(selectedRow()?.target).toBe("api:2")
   setup.mockInput.pressKey("x", { ctrl: true })
   await settle()
   expect(setup.captureCharFrame()).toContain("kill session api?")
@@ -146,6 +148,38 @@ test("prompt overlay: ^n creates, ^r renames", async () => {
   setup.mockInput.pressEnter()
   await settle()
   expect(renamed[0]?.[0]).toBe("api:1")
+})
+
+test("parked cursor follows the attached session's active window", async () => {
+  const w = (target: string, name: string, active: boolean) => ({
+    target, session: "api", name, dir: "~/Repos/api", agent: null, active, paneCount: 1, status: null, detail: null,
+  })
+  const group = (activeIndex: 1 | 2): SessionGroup[] => [{
+    target: "api", name: "api", dir: "~/Repos/api", attached: true, status: null, detail: null,
+    windows: [w("api:1", "claude", activeIndex === 1), w("api:2", "server", activeIndex === 2)],
+  }]
+  let list = group(1)
+  setBackend({ ...fakeBackend, list: async () => list })
+
+  setGroups(list)
+  updateQuery("")
+  selectTarget("api:1") // opening parks the cursor
+  await refresh()
+  expect(selectedRow()?.target).toBe("api:1")
+
+  // A window switch in the attached session propagates on the next poll.
+  list = group(2)
+  await refresh()
+  expect(selectedRow()?.target).toBe("api:2")
+
+  // Browsing unparks: the cursor is never yanked mid-navigation.
+  moveSelection(-1)
+  expect(selectedRow()?.target).toBe("api:1")
+  list = group(1) // active flips back to api:1 while cursor sits on it...
+  moveSelection(1) // ...but the user has moved on to api:2
+  list = group(1)
+  await refresh()
+  expect(selectedRow()?.target).toBe("api:2")
 })
 
 test("fuzzyScore: substring beats subsequence, misses rejected", () => {
