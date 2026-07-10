@@ -68,8 +68,14 @@ struct SettingsView: View {
                     }
                 }
             }
-            LabeledContent("Open-TUI command") {
-                TextField("auto — run the TUI in iTerm/Terminal", text: $settings.openTuiCommand)
+            Section {
+                LabeledContent("Open-TUI command") {
+                    TextField("auto", text: $settings.openTuiCommand)
+                }
+            } footer: {
+                Text("Runs when you click a notification or “Open TUI”. Leave empty for the default: launch the TUI from the repo in \(FileManager.default.fileExists(atPath: "/Applications/iTerm.app") ? "iTerm" : "Terminal"). Custom commands run via zsh -lc, so your PATH and aliases apply.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Button("Re-register plugin & MCP") {
                 state.copyMcpRegisterCommand()
