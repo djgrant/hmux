@@ -136,21 +136,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    // Focus gating: the app can't see the TUI's focus directly (that gate lives
-    // in the terminal). Approximate it — suppress only when a known terminal app
-    // is frontmost. A future protocol addition can report real TUI focus.
+    // Focus gating: the TUI reports its real focus state (renderer focus/blur
+    // events) in the presence file at ~/.humans/tui.json, alongside its pid.
+    // Trust it only while that pid is alive; no live presence, or no focus
+    // field yet (not every terminal reports focus), counts as unfocused —
+    // better a redundant banner than a silently swallowed one.
     private func tuiIsFocused() -> Bool {
-        guard let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
-            return false
-        }
-        let terminals = [
-            "com.googlecode.iterm2",
-            "com.apple.Terminal",
-            "com.mitchellh.ghostty",
-            "net.kovidgoyal.kitty",
-            "dev.warp.Warp-Stable"
-        ]
-        return terminals.contains(front)
+        let path = NSString(string: "~/.humans/tui.json").expandingTildeInPath
+        guard
+            let data = FileManager.default.contents(atPath: path),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let pid = json["pid"] as? Int32,
+            kill(pid, 0) == 0
+        else { return false }
+        return json["focused"] as? Bool == true
     }
 
     private func inQuietHours() -> Bool {

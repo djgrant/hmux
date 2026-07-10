@@ -51,6 +51,23 @@ export function createNotifier(opts: {
   }
 }
 
+/**
+ * True when the humans.sh menu bar app is running. The app posts native
+ * notifications for every new message, so a TUI emitting its own terminal
+ * notification (OSC 9/777) would duplicate each one — worse, as "iTerm"
+ * notifications rather than the app's. When the app is present the TUI
+ * stays silent and lets it own the channel; without it (pure-TUI setups)
+ * terminal notifications keep working. HUMANS_TUI_NOTIFY=1 forces the
+ * TUI's own notifications regardless.
+ */
+export function menuAppRunning(): boolean {
+  try {
+    return Bun.spawnSync(["pgrep", "-x", "HumansApp"]).exitCode === 0
+  } catch {
+    return false
+  }
+}
+
 // --- tmux: outer-terminal protocol detection ---------------------------------
 
 export type NotificationProtocol = "osc9" | "osc99" | "osc777"

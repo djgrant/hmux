@@ -17,6 +17,13 @@ export interface TuiPresence {
   tty: string
   program: string | null
   pid: number
+  /**
+   * Real terminal-focus state from the renderer's focus/blur events, for the
+   * menu app's "only notify when the TUI isn't focused" gate (better than its
+   * old "any terminal app frontmost" guess). Absent until the first event —
+   * not every terminal reports focus — and readers treat absent as unfocused.
+   */
+  focused?: boolean
 }
 
 // The tty as the terminal app knows it. `ps` reports the controlling
@@ -63,6 +70,15 @@ export function announcePresence(): void {
       if (current.pid === process.pid) rmSync(PRESENCE_PATH, { force: true })
     } catch {}
   })
+}
+
+/** Update the focus field of our own presence record. */
+export function setPresenceFocus(focused: boolean): void {
+  try {
+    const current = JSON.parse(readFileSync(PRESENCE_PATH, "utf8")) as TuiPresence
+    if (current.pid !== process.pid) return
+    writeFileSync(PRESENCE_PATH, JSON.stringify({ ...current, focused }))
+  } catch {}
 }
 
 /** The recorded TUI if its process is still alive, else null. */

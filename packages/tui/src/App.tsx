@@ -27,7 +27,8 @@ import { BANNER_BG, DIM, MAIN_BG } from "./theme"
 import { Composer } from "./components/Composer"
 import { Queue } from "./components/Queue"
 import { Footer } from "./components/Footer"
-import { createNotifier, formatNotification, inTmuxControlMode } from "./notify"
+import { createNotifier, formatNotification, inTmuxControlMode, menuAppRunning } from "./notify"
+import { setPresenceFocus } from "./presence"
 
 /**
  * Main-pane content cap: ≈960px at typical cell widths (~8–9px), so on very
@@ -131,17 +132,27 @@ export function App(props: {
   // focus having been stolen while away (see the scrollbox note below).
   const onTerminalFocus = () => {
     notifier.onFocus()
+    setPresenceFocus(true)
     bumpFocusEpoch()
   }
+  const onTerminalBlur = () => {
+    notifier.onBlur()
+    setPresenceFocus(false)
+  }
   renderer.on("focus", onTerminalFocus)
-  renderer.on("blur", notifier.onBlur)
+  renderer.on("blur", onTerminalBlur)
   onCleanup(() => {
     renderer.off("focus", onTerminalFocus)
-    renderer.off("blur", notifier.onBlur)
+    renderer.off("blur", onTerminalBlur)
   })
   createEffect(() => {
     const msg = incoming()
-    if (msg) notifier.notify(formatNotification(msg.agent, msg.body))
+    if (!msg) return
+    // Defer to the menu bar app when it's running: it posts a native
+    // notification for the same message, and two banners (one labelled
+    // "iTerm") is worse than one. HUMANS_TUI_NOTIFY=1 overrides.
+    if (process.env.HUMANS_TUI_NOTIFY !== "1" && menuAppRunning()) return
+    notifier.notify(formatNotification(msg.agent, msg.body))
   })
 
   // Select-to-copy: the renderer emits "selection" with isDragging=false when
