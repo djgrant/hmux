@@ -1,30 +1,32 @@
 # @humans/mux
 
-A tmux session router. Runs in any terminal, shows every session (name, dir,
-windows, attached state) with a live peek at the selected session's active
-pane, and opens sessions in place — no iTerm, no menu bar.
+A dashboard for your terminal sessions. One command, no flags, no config:
 
 ```
-bun run --cwd packages/mux dev
+mux
 ```
 
-## Opening a session
+It shows every session and window with **signals advertised by what's running
+inside them** — which agent is waiting on you, which is busy, which errored —
+and opens sessions in place in whatever terminal you use.
 
-- **Inside tmux** (recommended: give the router its own session/pane): ⏎ runs
-  `tmux switch-client` — this client retargets, the router keeps running.
-- **Outside tmux**: the TUI suspends, hands the terminal to `tmux attach`, and
-  resumes when you detach (`prefix d`).
+- Type to filter (fuzzy, across sessions and windows). `⏎` opens the top match.
+- `↑↓` select · `⏎` open · `^n` new session · `^r` rename · `^x` kill · `^c` quit
+- Inside a session you're in plain tmux — your server, your config, your
+  plugins. **`prefix d` (detach) returns to mux.** That's the only tmux you
+  need to know.
+- `mux <name>` jumps straight into the best-matching session.
 
-## Keys
-
-`↑↓`/`jk` select · `⏎` open · `n` new session · `r` rename · `x` kill · `q` quit
+Sessions with multiple windows show them as an indented tree; a window's pane
+splits are preserved exactly as laid out. While typing, matches flatten into
+one ranked list.
 
 ## Advertise protocol
 
-Control is inverted: mux knows nothing about what runs in a pane. Any process
-can advertise its state by setting tmux **pane user options**; mux reads them
-back and rolls them up to a per-session badge (priority: `waiting` > `error` >
-`busy` > `idle`).
+mux is the protocol; tmux is the bundled backend (see `src/backend.ts` for
+the seam). mux never inspects what runs in a pane — processes advertise their
+own state by setting tmux **pane user options**, and mux rolls them up
+pane → window → session (priority: `waiting` > `error` > `busy` > `idle`).
 
 From inside the pane in question:
 
@@ -45,13 +47,13 @@ tmux set-option -pu @humans_detail
   tolerated; unknown values render dim).
 - `@humans_detail` — optional one-line human-readable context. Control
   characters are stripped at ingress.
-- Options are set with `-p` (pane-level), so the advertiser needs no knowledge
-  of its session name and the state dies with the pane.
+- `-p` (pane-level) means the advertiser needs no knowledge of its session
+  name, and the state dies with the pane.
 
 ### Claude Code example
 
-`~/.claude/settings.json` hooks that badge the session whenever Claude is
-waiting for input and clear it when work resumes:
+Hooks that badge the session whenever Claude is waiting for input and clear
+it when work resumes (`~/.claude/settings.json`):
 
 ```json
 {
@@ -61,4 +63,11 @@ waiting for input and clear it when work resumes:
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "[ -n \"$TMUX\" ] && tmux set-option -p @humans_status busy && tmux set-option -pu @humans_detail; :" }] }]
   }
 }
+```
+
+## Development
+
+```
+bun run --cwd packages/mux dev   # run the TUI
+bun test                         # from packages/mux
 ```

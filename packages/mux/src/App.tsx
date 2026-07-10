@@ -1,25 +1,19 @@
 import { For, Show, onCleanup, onMount } from "solid-js"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
+import type { Backend } from "./backend"
 import {
   mode,
   moveSelection,
-  preview,
+  query,
   refresh,
+  rows,
   selected,
-  selectedSession,
-  sessions,
+  selectedRow,
   setMode,
   startPolling,
+  updateQuery,
 } from "./store"
-import {
-  attachBlocking,
-  insideTmux,
-  killSession,
-  newSession,
-  renameSession,
-  switchClient,
-} from "./tmux"
 import {
   BODY,
   BRIGHT,
@@ -28,15 +22,13 @@ import {
   GUTTER,
   HIGHLIGHT_BG,
   MAIN_BG,
-  SIDEBAR_BG,
   statusColor,
   statusGlyph,
 } from "./theme"
 
-const SIDEBAR_WIDTH = 44
-
 export function App(props: {
-  /** Disable the tmux poll loop (tests inject store state directly). */
+  backend: Backend
+  /** Disable the poll loop (tests inject store state directly). */
   poll?: boolean
 }) {
   const renderer = useRenderer()
@@ -47,15 +39,14 @@ export function App(props: {
     onCleanup(stop)
   })
 
-  const open = async (name: string) => {
-    if (insideTmux()) {
-      // The router keeps running in its own pane; this client just retargets.
-      await switchClient(name)
+  const open = async (target: string) => {
+    if (props.backend.opensInPlace()) {
+      await props.backend.open(target)
       return
     }
-    // Hand the terminal over to a full attach; resume when the user detaches.
+    // Hand the terminal to the session; come back here on detach (prefix d).
     renderer.suspend()
-    attachBlocking(name)
+    await props.backend.open(target)
     renderer.resume()
     refresh()
   }
@@ -65,7 +56,7 @@ export function App(props: {
     if (m.kind === "confirm-kill") {
       key.preventDefault()
       if (key.name === "y") {
-        killSession(m.session).then(refresh)
+        props.backend.kill(m.session).then(refresh)
         setMode({ kind: "list" })
       } else if (key.name !== "return") {
         setMode({ kind: "list" })
@@ -80,107 +71,102 @@ export function App(props: {
       }
       return
     }
-    const session = selectedSession()
-    if (key.name === "up" || key.name === "k") {
+
+    const row = selectedRow()
+    if (key.name === "up") {
       moveSelection(-1)
-    } else if (key.name === "down" || key.name === "j") {
+    } else if (key.name === "down") {
       moveSelection(1)
-    } else if (key.name === "return" && session) {
+    } else if (key.name === "return" && row) {
       key.preventDefault()
-      open(session.name)
-    } else if (key.name === "n") {
+      open(row.target)
+    } else if (key.name === "escape") {
+      updateQuery("")
+    } else if (key.name === "backspace") {
+      updateQuery(query().slice(0, -1))
+    } else if (key.ctrl && key.name === "n") {
       setMode({
         kind: "prompt",
         label: "new session name",
         initial: "",
-        onSubmit: (text) => newSession(text).then(refresh),
+        onSubmit: (text) => props.backend.create(text).then(refresh),
       })
-    } else if (key.name === "r" && session) {
+    } else if (key.ctrl && key.name === "r" && row) {
       setMode({
         kind: "prompt",
-        label: `rename ${session.name}`,
-        initial: session.name,
-        onSubmit: (text) => renameSession(session.name, text).then(refresh),
+        label: `rename ${row.session}`,
+        initial: row.session,
+        onSubmit: (text) => props.backend.rename(row.session, text).then(refresh),
       })
-    } else if (key.name === "x" && session) {
-      setMode({ kind: "confirm-kill", session: session.name })
-    } else if (key.name === "q") {
+    } else if (key.ctrl && key.name === "x" && row) {
+      setMode({ kind: "confirm-kill", session: row.session })
+    } else if (key.ctrl && key.name === "c") {
       renderer.destroy()
       process.exit(0)
+    } else if (!key.ctrl && !key.meta && key.sequence && /^[\x20-\x7e]$/.test(key.sequence)) {
+      // Typeahead: any printable character filters.
+      updateQuery(query() + key.sequence)
     }
   })
 
   return (
-    <box flexDirection="row" height="100%" backgroundColor={MAIN_BG}>
-      {/* Session list */}
-      <box
-        flexDirection="column"
-        width={SIDEBAR_WIDTH}
-        flexShrink={0}
-        backgroundColor={SIDEBAR_BG}
-        paddingTop={1}
-        paddingLeft={2}
-        paddingRight={1}
-      >
-        <text fg={DIM}>tmux sessions</text>
-        <box height={1} />
-        <Show when={sessions().length > 0} fallback={<text fg={FAINT}>no server running</text>}>
-          <For each={sessions()}>
-            {(s, i) => {
+    <box flexDirection="column" height="100%" backgroundColor={MAIN_BG} paddingTop={1} paddingLeft={2} paddingRight={2}>
+      {/* Header: title + typeahead query */}
+      <box flexDirection="row">
+        <text fg={DIM}>mux</text>
+        <Show when={query().length > 0}>
+          <text fg={BRIGHT}>{"   / " + query()}</text>
+        </Show>
+      </box>
+      <box height={1} />
+
+      {/* Two-tier list (flattens to ranked windows while typing) */}
+      <box flexGrow={1} minHeight={0} flexDirection="column" overflow="hidden">
+        <Show
+          when={rows().length > 0}
+          fallback={
+            <text fg={FAINT}>
+              {query().length > 0 ? "no matches" : "no sessions — ^n to create one"}
+            </text>
+          }
+        >
+          <For each={rows()}>
+            {(row, i) => {
               const isSelected = () => i() === selected()
+              const indent = () => (row.kind === "window" && query().length === 0 ? "    " : "")
+              const label = () =>
+                row.kind === "window" && query().length > 0
+                  ? `${row.session} · ${row.label}`
+                  : row.label
               return (
                 <box
-                  flexDirection="column"
-                  backgroundColor={isSelected() ? HIGHLIGHT_BG : SIDEBAR_BG}
+                  flexDirection="row"
+                  flexShrink={0}
+                  backgroundColor={isSelected() ? HIGHLIGHT_BG : undefined}
                   paddingLeft={1}
                 >
-                  <box flexDirection="row">
-                    <text fg={statusColor(s.status)}>{statusGlyph(s.status, s.attached)} </text>
-                    <text wrapMode="none" truncate fg={isSelected() ? BRIGHT : BODY}>
-                      {s.name}
-                    </text>
-                  </box>
-                  <text wrapMode="none" truncate fg={FAINT}>
-                    {"  "}{s.dir}
+                  <text wrapMode="none" truncate fg={isSelected() ? BRIGHT : row.kind === "session" ? BODY : DIM}>
+                    <span style={{ fg: statusColor(row.status) }}>
+                      {indent() + statusGlyph(row.status, row.attached) + " "}
+                    </span>
+                    {label()}
+                    <span style={{ fg: isSelected() ? DIM : FAINT }}>{"  " + row.dir}</span>
+                    <Show when={row.detail}>
+                      <span style={{ fg: statusColor(row.status) }}>{"  " + row.detail}</span>
+                    </Show>
                   </text>
-                  <Show when={s.detail}>
-                    <text wrapMode="none" truncate fg={statusColor(s.status)}>
-                      {"  " + s.detail}
-                    </text>
-                  </Show>
                 </box>
               )
             }}
           </For>
         </Show>
-        <box flexGrow={1} />
-        <text fg={FAINT}>⏎ open · n new · r rename · x kill · q quit</text>
-        <box height={1} />
       </box>
 
-      {/* Peek pane: last screenful of the selected session's active pane */}
-      <box flexDirection="column" flexGrow={1} minWidth={0} paddingTop={1} paddingLeft={2} paddingRight={1}>
-        <Show when={selectedSession()} keyed>
-          {(s) => (
-            <>
-              <text fg={DIM}>
-                {s.name} · {s.windows} window{s.windows === 1 ? "" : "s"} ·{" "}
-                {s.attached ? "attached" : "detached"}
-                {s.status ? ` · ${s.status}` : ""}
-              </text>
-              <box height={1} />
-              <box flexGrow={1} minHeight={0} flexDirection="column">
-                <For each={preview()}>
-                  {(line) => (
-                    <text wrapMode="none" truncate fg={FAINT}>
-                      {line || " "}
-                    </text>
-                  )}
-                </For>
-              </box>
-            </>
-          )}
-        </Show>
+      {/* Footer */}
+      <box flexShrink={0}>
+        <text wrapMode="none" truncate fg={FAINT}>
+          type to filter · ⏎ open · ^n new · ^r rename · ^x kill · ^c quit — inside a session, prefix d returns here
+        </text>
       </box>
 
       {/* Prompt overlay (new / rename) */}
@@ -188,44 +174,42 @@ export function App(props: {
         when={mode().kind === "prompt" ? (mode() as Extract<ReturnType<typeof mode>, { kind: "prompt" }>) : null}
         keyed
       >
-        {(m) => (
-          <box
-            position="absolute"
-            top={2}
-            left={4}
-            width={40}
-            flexDirection="column"
-            border
-            borderColor={GUTTER}
-            backgroundColor={MAIN_BG}
-            paddingLeft={1}
-            paddingRight={1}
-          >
-            <text fg={DIM}>{m.label}</text>
-            {(() => {
-              let ref: TextareaRenderable | undefined
-              return (
-                <textarea
-                  ref={(r: TextareaRenderable) => {
-                    ref = r
-                    queueMicrotask(() => r.focus())
-                  }}
-                  focused
-                  initialValue={m.initial}
-                  minHeight={1}
-                  maxHeight={1}
-                  textColor={BODY}
-                  onSubmit={() => {
-                    const text = ref?.plainText.trim() ?? ""
-                    setMode({ kind: "list" })
-                    if (text) m.onSubmit(text)
-                  }}
-                />
-              )
-            })()}
-            <text fg={FAINT}>⏎ confirm · esc cancel</text>
-          </box>
-        )}
+        {(m) => {
+          let ref: TextareaRenderable | undefined
+          return (
+            <box
+              position="absolute"
+              top={2}
+              left={4}
+              width={40}
+              flexDirection="column"
+              border
+              borderColor={GUTTER}
+              backgroundColor={MAIN_BG}
+              paddingLeft={1}
+              paddingRight={1}
+            >
+              <text fg={DIM}>{m.label}</text>
+              <textarea
+                ref={(r: TextareaRenderable) => {
+                  ref = r
+                  queueMicrotask(() => r.focus())
+                }}
+                focused
+                initialValue={m.initial}
+                minHeight={1}
+                maxHeight={1}
+                textColor={BODY}
+                onSubmit={() => {
+                  const text = ref?.plainText.trim() ?? ""
+                  setMode({ kind: "list" })
+                  if (text) m.onSubmit(text)
+                }}
+              />
+              <text fg={FAINT}>⏎ confirm · esc cancel</text>
+            </box>
+          )
+        }}
       </Show>
 
       {/* Kill confirmation */}
