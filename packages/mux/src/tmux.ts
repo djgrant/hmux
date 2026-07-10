@@ -5,7 +5,7 @@
  * this module reads them back and rolls them up pane → window → session.
  */
 import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
-import { focusTarget } from "./focus"
+import { focusTerminal } from "@humans/focus"
 import { HOLD_SESSION, registeredTargets } from "./targets"
 
 const SEP = "\x1f" // unit separator: can't appear in names/paths
@@ -189,7 +189,7 @@ export class TmuxBackend implements Backend {
   async openInClient(target: string, client: DisplayTarget): Promise<void> {
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
     await tmux(["switch-client", "-c", client.tty, "-t", target.split(":")[0]])
-    focusTarget(client).catch(() => {}) // fire-and-forget: focus never blocks or fails the open
+    focusTerminal(client).catch(() => {}) // fire-and-forget: focus never blocks or fails the open
   }
 
   async create(name: string): Promise<void> {

@@ -1,26 +1,27 @@
 /**
- * Best-effort focus of the terminal window holding a display target, so the
- * loaded session is actually in front of the user. Layered, all
- * failure-silent (an unfocused-but-loaded session is still a success):
- *   1. xterm window-ops "raise" written straight to the target's tty — the
- *      emulator interprets it if its prefs allow (iTerm: "Terminal may
- *      raise/lower windows"; Ghostty ignores window ops).
- *   2. One general mechanism, stamp-and-focus: write a unique title onto the
- *      target through its tty, find the tab by name via the app's scripting
- *      interface, select it, clear the stamp. Matching by title rather than
- *      tty survives pty-nesting wrappers (kiro, script, etc.) where the tty
- *      the target sees isn't the one the terminal app knows about. Only the
- *      final "select by name" verb is app-specific (each scripting
- *      dictionary differs) — see STRATEGIES. Apps without a tab-selection
- *      API get app-level activation (no-op when the picker is in the same
- *      app). First run prompts for macOS Automation permission.
+ * Bring the terminal window/tab attached to a tty to the front.
+ *
+ * The mechanism, stamp-and-focus: write a unique title onto the terminal
+ * through its tty (OSC 0), find the tab by that name via the app's scripting
+ * interface, select it, clear the stamp. Matching by title rather than tty
+ * survives pty-nesting wrappers (kiro, script, ssh-in-a-pty, etc.) where the
+ * tty the caller knows isn't the one the terminal app knows about. Only the
+ * final "select tab by name" verb is app-specific (each scripting dictionary
+ * differs) — see STRATEGIES. Apps without a tab-selection API get app-level
+ * activation. Everything is failure-silent: focus is best-effort by design.
  */
 import { writeFileSync } from "node:fs"
-import type { DisplayTarget } from "./backend"
+
+export interface FocusTarget {
+  /** The tty of the terminal to focus, as seen by the process inside it. */
+  tty: string
+  /** TERM_PROGRAM of that terminal (e.g. "iTerm.app", "ghostty"). */
+  program: string | null
+}
 
 // The stamp delay does double duty: lets the terminal ingest the new title,
-// and lets tmux finish redrawing the switched session so the tab doesn't
-// come forward mid-paint (visible flash in Ghostty).
+// and lets whatever just redrew the terminal (e.g. tmux switch-client)
+// finish painting so the tab doesn't come forward mid-paint.
 const SETTLE_MS = 350
 
 // iTerm may suffix the title (e.g. "… (tmux)"), so match by containment.
@@ -66,11 +67,11 @@ tell application "Terminal"
 end tell`
 
 /**
- * Apps we can select an exact tab in; anything else falls back to activate.
- * Same stamp, per-app "find tab by name" verb. Others would slot in here:
- * kitty via `kitten @ focus-window --match title:<marker>` (its remote
- * control instead of AppleScript), WezTerm via `wezterm cli activate-pane`,
- * Linux via wmctrl/xdotool title match.
+ * Apps we can select an exact tab in, keyed by TERM_PROGRAM; anything else
+ * falls back to app-level activation. Same stamp, per-app "find tab by name"
+ * verb. Others would slot in here: kitty via `kitten @ focus-window --match
+ * title:<marker>` (its remote control instead of AppleScript), WezTerm via
+ * `wezterm cli activate-pane`, Linux via wmctrl/xdotool title match.
  */
 const STRATEGIES: Record<string, (marker: string) => string> = {
   "iTerm.app": iTermSelectByName,
@@ -91,7 +92,7 @@ async function osascript(script: string): Promise<void> {
 
 /** Stamp the target's title via its tty, run the app's find-by-name script, unstamp. */
 async function stampAndFocus(tty: string, script: (marker: string) => string): Promise<void> {
-  const marker = `mux-target ${tty}`
+  const marker = `humans-focus ${tty}`
   try {
     writeFileSync(tty, `\x1b]0;${marker}\x07`)
   } catch {
@@ -104,13 +105,15 @@ async function stampAndFocus(tty: string, script: (marker: string) => string): P
   } catch {}
 }
 
-export async function focusTarget(client: DisplayTarget): Promise<void> {
+export async function focusTerminal(target: FocusTarget): Promise<void> {
+  // xterm window-ops "raise", honored by some emulators when prefs allow
+  // (iTerm: "Terminal may raise/lower windows"; Ghostty ignores window ops).
   try {
-    writeFileSync(client.tty, "\x1b[5t")
+    writeFileSync(target.tty, "\x1b[5t")
   } catch {}
-  if (process.platform !== "darwin" || !client.program) return
-  const strategy = STRATEGIES[client.program]
-  if (strategy) return stampAndFocus(client.tty, strategy)
-  const app = APP_NAMES[client.program]
+  if (process.platform !== "darwin" || !target.program) return
+  const strategy = STRATEGIES[target.program]
+  if (strategy) return stampAndFocus(target.tty, strategy)
+  const app = APP_NAMES[target.program]
   if (app) await osascript(`tell application "${app}" to activate`)
 }

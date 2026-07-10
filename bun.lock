@@ -16,10 +16,18 @@
         "humans-run": "./src/run.ts",
       },
     },
+    "packages/focus": {
+      "name": "@humans/focus",
+      "version": "0.0.0",
+      "bin": {
+        "humans-focus": "src/cli.ts",
+      },
+    },
     "packages/mux": {
       "name": "@humans/mux",
       "version": "0.0.0",
       "dependencies": {
+        "@humans/focus": "workspace:*",
         "@opentui/core": "^0.4.3",
         "@opentui/solid": "^0.4.3",
         "solid-js": "^1.9.0",
@@ -112,6 +120,8 @@
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
 
     "@humans/cc-plugin": ["@humans/cc-plugin@workspace:packages/cc-plugin"],
+
+    "@humans/focus": ["@humans/focus@workspace:packages/focus"],
 
     "@humans/mux": ["@humans/mux@workspace:packages/mux"],
 
