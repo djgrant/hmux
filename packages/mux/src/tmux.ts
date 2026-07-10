@@ -38,7 +38,34 @@ interface PaneRow {
   detail: string | null
 }
 
+/**
+ * $TMUX in the env is hearsay: a terminal app launched from inside tmux
+ * inherits it (LaunchServices propagates the launcher's environment), and
+ * every shell it spawns then looks "inside tmux" while having no client.
+ * Genuinely inside means the advertised pane's root process is an ancestor
+ * of ours — that holds through pty-nesting wrappers and rejects inherited env.
+ */
+export async function insideTmux(): Promise<boolean> {
+  const pane = process.env.TMUX_PANE
+  if (!process.env.TMUX || !pane) return false
+  try {
+    const out = await tmux(["display-message", "-p", "-t", pane, "#{pane_pid}"])
+    const panePid = Number(out.trim())
+    if (!panePid) return false
+    let pid = process.pid
+    for (let hops = 0; pid > 1 && hops < 50; hops++) {
+      if (pid === panePid) return true
+      pid = Number(Bun.spawnSync(["ps", "-o", "ppid=", "-p", String(pid)]).stdout.toString().trim())
+      if (!Number.isFinite(pid)) break
+    }
+  } catch {}
+  return false
+}
+
 export class TmuxBackend implements Backend {
+  /** Pass the result of insideTmux(); the env var alone is not trusted. */
+  constructor(private inTmux = false) {}
+
   async list(): Promise<SessionGroup[]> {
     let sessionsOut: string
     try {
@@ -124,7 +151,7 @@ export class TmuxBackend implements Backend {
   }
 
   opensInPlace(): boolean {
-    return !!process.env.TMUX
+    return this.inTmux
   }
 
   async open(target: string): Promise<void> {
@@ -132,7 +159,7 @@ export class TmuxBackend implements Backend {
     // so both attach and switch-client land on it.
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
     const session = target.split(":")[0]
-    if (this.opensInPlace()) {
+    if (this.inTmux) {
       // Router lives in its own pane; this client just retargets.
       await tmux(["switch-client", "-t", session])
       return

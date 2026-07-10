@@ -1,7 +1,7 @@
 import { render } from "@opentui/solid"
 import { App } from "./App"
 import { MAIN_BG } from "./theme"
-import { TmuxBackend } from "./tmux"
+import { TmuxBackend, insideTmux } from "./tmux"
 import { fuzzyScore, setBackend } from "./store"
 
 // Full-screen TUI sizes itself from STDOUT; refuse to render clamped into a
@@ -14,7 +14,8 @@ if (!process.stdout.isTTY) {
   process.exit(1)
 }
 
-const backend = new TmuxBackend()
+const inTmux = await insideTmux()
+const backend = new TmuxBackend(inTmux)
 setBackend(backend)
 
 const arg = process.argv[2]
@@ -22,7 +23,7 @@ const arg = process.argv[2]
 // `mux target`: park this terminal as a display target. The picker (running
 // anywhere else) routes opens into this terminal and stays on screen itself.
 if (arg === "target") {
-  if (process.env.TMUX) {
+  if (inTmux) {
     console.error("mux target: run this in a terminal that is not already inside tmux.")
     process.exit(1)
   }
