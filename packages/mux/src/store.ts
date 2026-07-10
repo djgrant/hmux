@@ -99,7 +99,9 @@ export function moveSelection(delta: number) {
 }
 
 export function updateQuery(next: string) {
-  setQuery(next)
+  // A query never starts with whitespace: a stray space would match every
+  // entry and flatten the whole tree for nothing.
+  setQuery(next.trimStart())
   setSelected(0)
 }
 
