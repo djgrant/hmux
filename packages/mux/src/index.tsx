@@ -65,11 +65,21 @@ if (arg === "target") {
   // sends a real session over. Recreated on demand; hidden from the picker.
   Bun.spawnSync([
     "tmux", "new-session", "-d", "-s", HOLD_SESSION,
-    "printf '\\n  mux target — pick a session in mux to load it here\\n'; exec cat",
+    // stty -echo + cat>/dev/null: swallow input (incl. focus reports \e[I/\e[O
+    // that iTerm -CC delivers to panes) instead of echoing it under the banner.
+    "stty -echo; printf '\\n  mux target — pick a session in mux to load it here\\n'; exec cat >/dev/null",
   ])
   registerTarget(tty, process.env.TERM_PROGRAM ?? null)
+  // `mux target --cc` attaches in control mode: this tab becomes the tmux
+  // gateway and sessions routed here open as native iTerm tabs/windows.
+  // Opt-in and iTerm-only for now — Ghostty is building -CC support
+  // (ghostty-org/ghostty#1935; parser landed in 1.3.0, GUI not hooked up),
+  // so widen this gate when it ships. LC_TERMINAL is iTerm's marker that
+  // survives ssh, where TERM_PROGRAM does not.
+  const iterm = process.env.TERM_PROGRAM === "iTerm.app" || process.env.LC_TERMINAL === "iTerm2"
+  const cc = process.argv.includes("--cc") && iterm
   try {
-    const proc = Bun.spawn(["tmux", "attach", "-t", HOLD_SESSION], {
+    const proc = Bun.spawn(["tmux", ...(cc ? ["-CC"] : []), "attach", "-t", HOLD_SESSION], {
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",

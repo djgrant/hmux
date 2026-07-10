@@ -38,6 +38,12 @@ export interface DisplayTarget {
   tty: string
   /** TERM_PROGRAM captured at registration (e.g. "iTerm.app", "ghostty"); used to focus it. */
   program: string | null
+  /**
+   * Client is attached in control mode (iTerm tmux -CC gateway). Its tty
+   * carries the %-command protocol: writing any raw bytes to it (escape
+   * sequences, title stamps) corrupts the stream and detaches the client.
+   */
+  controlMode?: boolean
 }
 
 export interface Backend {

@@ -25,6 +25,9 @@ and opens sessions in place in whatever terminal you use.
   AppleScript on macOS — iTerm and Ghostty get exact tab/window selection,
   even when the picker is in the same app; other terminals get app-level
   activation. The first focus prompts for Automation permission).
+- `mux target --cc` (iTerm only) parks the target as a **tmux control-mode
+  gateway**: sessions routed to it open as native iTerm tabs and windows
+  rather than rendering inside the parked tab.
 
 Sessions with multiple windows show them as an indented tree; a window's pane
 splits are preserved exactly as laid out. While typing, matches flatten into

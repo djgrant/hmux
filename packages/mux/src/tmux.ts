@@ -178,9 +178,19 @@ export class TmuxBackend implements Backend {
     const registered = registeredTargets()
     if (registered.length === 0) return []
     try {
-      const out = await tmux(["list-clients", "-F", "#{client_tty}"])
-      const live = new Set(out.split("\n").filter(Boolean))
-      return registered.filter((t) => live.has(t.tty))
+      const out = await tmux(["list-clients", "-F", `#{client_tty}${SEP}#{client_control_mode}`])
+      const live = new Map(
+        out
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [tty, control] = line.split(SEP)
+            return [tty, control === "1"] as const
+          }),
+      )
+      return registered
+        .filter((t) => live.has(t.tty))
+        .map((t) => ({ ...t, controlMode: live.get(t.tty) }))
     } catch {
       return []
     }
@@ -189,7 +199,49 @@ export class TmuxBackend implements Backend {
   async openInClient(target: string, client: DisplayTarget): Promise<void> {
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
     await tmux(["switch-client", "-c", client.tty, "-t", target.split(":")[0]])
+    // focusTerminal stamps titles through the tty — fatal to a control-mode
+    // client, whose tty is the iTerm %-protocol channel. Jiggle-repaint the
+    // alt-screen panes, give the redraw 300ms to land, then activate.
+    if (client.controlMode) {
+      await this.repaintSession(target.split(":")[0]).catch(() => {})
+      await Bun.sleep(300)
+      if (process.platform === "darwin" && client.program === "iTerm.app")
+        Bun.spawn(["osascript", "-e", 'tell application "iTerm2" to activate'], {
+          stdout: "ignore",
+          stderr: "ignore",
+        })
+      return
+    }
     focusTerminal(client).catch(() => {}) // fire-and-forget: focus never blocks or fails the open
+  }
+
+  /**
+   * iTerm builds -CC windows from tmux's stored grid, which misses
+   * alternate-screen apps — TUIs come up blank until a real size change
+   * makes them repaint (SIGWINCH alone is ignored at unchanged size).
+   * Jiggle one column and back, but only windows that hold an alt-screen
+   * pane: TUIs redraw without scrolling, and plain shell windows — where a
+   * resize means visible scroll jumps — are left alone. Afterwards drop the
+   * manual-size override so the client owns sizing again.
+   */
+  private async repaintSession(session: string): Promise<void> {
+    const out = await tmux([
+      "list-panes", "-s", "-t", session, "-F",
+      `#{window_id}${SEP}#{window_width}${SEP}#{window_height}${SEP}#{alternate_on}`,
+    ])
+    const wins = new Map<string, { w: string; h: string; alt: boolean }>()
+    for (const line of out.split("\n")) {
+      if (!line) continue
+      const [id, w, h, alt] = line.split(SEP)
+      const prev = wins.get(id)
+      wins.set(id, { w, h, alt: (prev?.alt ?? false) || alt === "1" })
+    }
+    for (const [id, { w, h, alt }] of wins) {
+      if (!alt) continue
+      await tmux(["resize-window", "-t", id, "-x", String(Number(w) - 1), "-y", h])
+      await tmux(["resize-window", "-t", id, "-x", w, "-y", h])
+      await tmux(["set-option", "-w", "-t", id, "-u", "window-size"])
+    }
   }
 
   async create(name: string): Promise<void> {
