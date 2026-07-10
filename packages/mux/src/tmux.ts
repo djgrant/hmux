@@ -251,8 +251,9 @@ export class TmuxBackend implements Backend {
     await tmux(["new-session", "-d", "-s", name, "-c", process.env.HOME ?? "/"])
   }
 
-  async rename(session: string, to: string): Promise<void> {
-    await tmux(["rename-session", "-t", session, to])
+  async rename(target: string, to: string): Promise<void> {
+    const verb = target.includes(":") ? "rename-window" : "rename-session"
+    await tmux([verb, "-t", target, to])
   }
 
   async kill(session: string): Promise<void> {

@@ -11,7 +11,7 @@ inside them** — which agent is waiting on you, which is busy, which errored �
 and opens sessions in place in whatever terminal you use.
 
 - Type to filter (fuzzy, across sessions and windows). `⏎` opens the top match.
-- `↑↓` select · `⏎` open · `⌥↑`/`⌥↓` peek · `^n` new session · `^r` rename ·
+- `↑↓` select · `⏎` open · `⌥↑`/`⌥↓` peek · `^n` new session · `^r` rename (session or window) ·
   `^x` kill · `^c` quit
 - Peek (hold option while arrowing) loads each selection into the display
   target as you pass it, without moving focus off the picker. Needs a
@@ -65,7 +65,8 @@ tmux set-option -pu @humans_detail
 - `@humans_detail` — optional one-line human-readable context. Control
   characters are stripped at ingress.
 - `@humans_agent` — optional identity of the agent in the pane (e.g.
-  "api-3f2c · sonnet"), shown as row metadata and searchable in typeahead.
+  "api-3f2c · sonnet"). Ingested but not currently surfaced: the picker
+  shows and searches only session and window names.
 - `-p` (pane-level) means the advertiser needs no knowledge of its session
   name, and the state dies with the pane.
 

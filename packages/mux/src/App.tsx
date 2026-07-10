@@ -11,6 +11,7 @@ import {
   selected,
   selectedRow,
   setMode,
+  setSelected,
   startPolling,
   updateQuery,
 } from "./store"
@@ -113,11 +114,13 @@ export function App(props: {
         onSubmit: (text) => props.backend.create(text).then(refresh),
       })
     } else if (key.ctrl && key.name === "r" && row) {
+      // Renames the row under the cursor: session rows rename the session,
+      // window rows the window.
       setMode({
         kind: "prompt",
-        label: `rename ${row.session}`,
-        initial: row.session,
-        onSubmit: (text) => props.backend.rename(row.session, text).then(refresh),
+        label: `rename ${row.kind === "window" ? "window" : "session"} ${row.label}`,
+        initial: row.label,
+        onSubmit: (text) => props.backend.rename(row.target, text).then(refresh),
       })
     } else if (key.ctrl && key.name === "x" && row) {
       setMode({ kind: "confirm-kill", session: row.session })
@@ -164,15 +167,16 @@ export function App(props: {
                   flexShrink={0}
                   backgroundColor={isSelected() ? HIGHLIGHT_BG : undefined}
                   paddingLeft={1}
+                  onMouseDown={() => {
+                    setSelected(i())
+                    open(row.target)
+                  }}
                 >
                   <text wrapMode="none" truncate fg={isSelected() ? BRIGHT : row.kind === "session" ? BODY : DIM}>
                     <span style={{ fg: statusColor(row.status) }}>
                       {indent() + statusGlyph(row.status, row.attached) + " "}
                     </span>
                     {label()}
-                    <Show when={row.meta}>
-                      <span style={{ fg: isSelected() ? BODY : DIM }}>{"  " + row.meta}</span>
-                    </Show>
                     <Show when={row.detail}>
                       <span style={{ fg: statusColor(row.status) }}>{"  " + row.detail}</span>
                     </Show>
@@ -215,10 +219,14 @@ export function App(props: {
               <textarea
                 ref={(r: TextareaRenderable) => {
                   ref = r
-                  queueMicrotask(() => r.focus())
+                  queueMicrotask(() => {
+                    r.focus()
+                    r.cursorOffset = r.plainText.length // edit from the end, not over the start
+                  })
                 }}
                 focused
                 initialValue={m.initial}
+                keyBindings={[{ name: "return", action: "submit" }]}
                 minHeight={1}
                 maxHeight={1}
                 textColor={BODY}

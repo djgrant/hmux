@@ -22,8 +22,6 @@ export interface Row {
   target: string
   label: string
   dir: string
-  /** Window rows: advertised agent identity, running command, pane count. */
-  meta: string | null
   status: Status | null
   detail: string | null
   attached: boolean
@@ -31,15 +29,11 @@ export interface Row {
 }
 
 function sessionRow(g: SessionGroup): Row {
-  // Single-window sessions collapse to the header, so carry that window's
-  // meta up — it's the only place it would show.
-  const only = g.windows.length === 1 ? g.windows[0] : undefined
   return {
     kind: "session",
     target: g.target,
     label: g.name,
     dir: g.dir,
-    meta: only ? windowMeta(only) : null,
     status: g.status,
     detail: g.detail,
     attached: g.attached,
@@ -47,19 +41,15 @@ function sessionRow(g: SessionGroup): Row {
   }
 }
 
-/** "api-3f2c · sonnet · 3 panes" — whichever parts exist. */
-function windowMeta(w: WindowEntry): string | null {
-  const parts = [w.agent, w.paneCount > 1 ? `${w.paneCount} panes` : null].filter(Boolean)
-  return parts.length > 0 ? parts.join(" · ") : null
-}
-
 function windowRow(w: WindowEntry, g: SessionGroup): Row {
+  // Label is the tmux window name. The advertised agent identity stays out
+  // of the display (too noisy) but remains searchable; pane count is not
+  // shown either.
   return {
     kind: "window",
     target: w.target,
     label: w.name,
     dir: w.dir,
-    meta: windowMeta(w),
     status: w.status,
     detail: w.detail,
     attached: g.attached,
@@ -89,12 +79,12 @@ export const rows = createMemo<Row[]>(() => {
     }
     return out
   }
-  // Typing flattens to one ranked list: windows matched by "session window",
-  // so a query can land on "that window anywhere".
+  // Typing flattens to one ranked list: windows matched by "session window" —
+  // exactly the text on screen, nothing invisible.
   const scored: Array<{ row: Row; score: number }> = []
   for (const g of groups()) {
     for (const w of g.windows) {
-      const score = fuzzyScore(`${g.name} ${w.name} ${w.agent ?? ""}`, q)
+      const score = fuzzyScore(`${g.name} ${w.name}`, q)
       if (score >= 0) scored.push({ row: windowRow(w, g), score })
     }
   }

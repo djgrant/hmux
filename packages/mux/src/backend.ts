@@ -62,7 +62,8 @@ export interface Backend {
   /** Load target into the display client without taking focus (peek). */
   peekInClient(target: string, client: DisplayTarget): Promise<void>
   create(name: string): Promise<void>
-  rename(session: string, to: string): Promise<void>
+  /** Rename a session ("name") or a window ("name:index"). */
+  rename(target: string, to: string): Promise<void>
   kill(session: string): Promise<void>
 }
 

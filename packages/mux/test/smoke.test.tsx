@@ -9,6 +9,8 @@ const openedInClient: Array<[string, string]> = []
 const peeked: Array<[string, string]> = []
 let liveTargets: DisplayTarget[] = []
 const killed: string[] = []
+const created: string[] = []
+const renamed: Array<[string, string]> = []
 const fakeBackend: Backend = {
   list: async () => [],
   open: async (t) => void opened.push(t),
@@ -16,8 +18,8 @@ const fakeBackend: Backend = {
   targets: async () => liveTargets,
   openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
   peekInClient: async (t, c) => void peeked.push([t, c.tty]),
-  create: async () => {},
-  rename: async () => {},
+  create: async (n) => void created.push(n),
+  rename: async (t, to) => void renamed.push([t, to]),
   kill: async (s) => void killed.push(s),
 }
 
@@ -68,12 +70,15 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   expect(rows().map((r) => r.target)).toEqual(["api", "api:1", "api:2", "web"])
   expect(frame).toContain("approve the plan?")
   expect(frame).toContain("⌥↑↓ peek")
-  // Window meta: advertised agent identity + pane count; single-window
-  // sessions carry their window meta up to the collapsed header row.
-  expect(frame).toContain("api-3f2c · sonnet")
-  expect(frame).toContain("2 panes")
+  // Window rows are labelled by tmux window name; the advertised agent
+  // identity and pane count are not displayed (agent stays searchable).
+  expect(frame).toContain("claude")
+  expect(frame).toContain("server")
+  expect(frame).not.toContain("api-3f2c")
+  expect(frame).not.toContain("2 panes")
 
-  // Typeahead flattens to ranked windows: "cl" matches api's claude window.
+  // Typeahead flattens to ranked windows: "cl" matches api's claude window
+  // (and the invisible agent identity is searchable too).
   setup.mockInput.typeText("cl")
   await settle()
   expect(rows()[0]?.target).toBe("api:1")
@@ -108,6 +113,39 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   setup.mockInput.pressKey("y")
   await settle()
   expect(killed).toEqual(["api"])
+})
+
+test("prompt overlay: ^n creates, ^r renames", async () => {
+  seed()
+  const setup = await testRender(() => <App backend={fakeBackend} poll={false} />, {
+    width: 110,
+    height: 30,
+  })
+  const settle = async () => {
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 20))
+      await setup.renderOnce()
+    }
+  }
+  await settle()
+  setup.mockInput.pressKey("n", { ctrl: true })
+  await settle()
+  expect(setup.captureCharFrame()).toContain("new session name")
+  setup.mockInput.typeText("foo")
+  await settle()
+  setup.mockInput.pressEnter()
+  await settle()
+  expect(created).toEqual(["foo"])
+
+  // ^r on a window row renames the window (target "session:index").
+  setup.mockInput.pressArrow("down")
+  await settle()
+  setup.mockInput.pressKey("r", { ctrl: true })
+  await settle()
+  expect(setup.captureCharFrame()).toContain("rename window claude")
+  setup.mockInput.pressEnter()
+  await settle()
+  expect(renamed[0]?.[0]).toBe("api:1")
 })
 
 test("fuzzyScore: substring beats subsequence, misses rejected", () => {
