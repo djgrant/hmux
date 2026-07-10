@@ -5,13 +5,17 @@
  *   SessionStart     -> POST /sessions/register   (project = cwd, agent = dirname/branch-<id prefix>)
  *   PreToolUse       -> mcp__humans__* calls only: stamp the harness-provided
  *                       session id into the tool input (updatedInput), making
- *                       message attribution harness-asserted, not model-asserted
+ *                       message attribution harness-asserted, not model-asserted.
+ *                       Also the mux listening post: ask/approve advertise a
+ *                       message label for the duration of the block, and
+ *                       signal stashes a turn-end declaration for Stop
  *   UserPromptSubmit -> POST /sessions/:id/status {status: "working"}
  *                       + GET /sessions/:id; if bound, emit additionalContext
  *   PostToolUse      -> POST /sessions/:id/status {status: "working"}   (heartbeat)
  *                       + GET /sessions/:id; if bound and not yet injected
  *                       this session (marker file), emit additionalContext
- *   Stop             -> POST /sessions/:id/status {status: "idle"}
+ *   Stop             -> promotes a declared signal (question -> needs-attention,
+ *                       done -> idle "done"), else {status: "idle"}
  *   Notification     -> POST /sessions/:id/status — "needs-attention" only
  *                       for permission prompts; the idle "waiting for your
  *                       input" notification maps to "idle"; others no-op
@@ -61,11 +65,39 @@ const clearMarker = (id: string) => {
   } catch {}
 }
 
+// Signal markers carry a turn-end declaration (mcp__humans__signal) from the
+// PreToolUse that saw the call to the Stop that ends the turn. The marker
+// outlives Stop on purpose — the ~60s idle Notification must not stomp the
+// declared label — and is cleared when the human acts (UserPromptSubmit) or
+// the conversation resets (SessionStart/SessionEnd).
+const signalPath = (id: string) => join(STATE_DIR, `signal-${encodeURIComponent(id)}`)
+const readSignal = (id: string): string | undefined => {
+  try {
+    const value = readFileSync(signalPath(id), "utf8").trim()
+    return value.length > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+const writeSignal = (id: string, status: string) => {
+  try {
+    mkdirSync(STATE_DIR, { recursive: true })
+    writeFileSync(signalPath(id), status)
+  } catch {}
+}
+const clearSignal = (id: string) => {
+  try {
+    rmSync(signalPath(id), { force: true })
+  } catch {}
+}
+
 interface HookInput {
   session_id?: string
   cwd?: string
   hook_event_name?: string
   model?: unknown
+  /** SessionStart events: "startup" | "resume" | "clear" | "compact". */
+  source?: unknown
   /** Notification events: the notification text. */
   message?: unknown
   /** PreToolUse events: the tool being called and its input. */
@@ -83,8 +115,10 @@ interface SessionInfo {
  * Advertise into tmux pane user options (the mux advertise protocol) — the
  * hook runs inside the pane, so $TMUX_PANE identifies it exactly. This is a
  * second, server-independent signal plane: mux reads it straight off tmux.
- * Status semantics here are mux's ("who needs me"), not the roster's — a
- * finished turn is `waiting`, not `idle`. Failure-silent like everything else.
+ * Status vocabulary is mux's ("who needs me"): error > message (the agent
+ * left the human something; detail says what) > busy > idle. An unsignalled
+ * finished turn is idle — only declared states claim attention. Failure-silent
+ * like everything else.
  */
 const advertise = (status: string | null, detail?: string, agent?: string | null) => {
   const pane = process.env.TMUX_PANE
@@ -148,7 +182,9 @@ const modelName = (model: unknown): string | undefined => {
 const boundContext = (_session: SessionInfo): string =>
   "This session is bound to a human inbox via humans.sh. When you need a decision, " +
   "clarification, or approval, ask the human with the mcp__humans__ask tool instead of " +
-  "guessing. Send progress updates and completions with mcp__humans__notify."
+  "guessing. Send progress updates and completions with mcp__humans__notify. Just before " +
+  "ending a turn, declare how it ends with mcp__humans__signal: status 'question' when your " +
+  "response asks the human something, 'done' when the work is complete."
 
 /** GET the session, or undefined on any failure (server down, 404, bad JSON). */
 const getSessionInfo = async (encoded: string): Promise<SessionInfo | undefined> => {
@@ -185,7 +221,12 @@ const main = async () => {
       // Fresh conversation: whatever context an earlier run injected is gone,
       // so clear the marker and let the next bound check re-inject.
       clearMarker(id)
-      advertise("busy", undefined, [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "))
+      clearSignal(id)
+      // A session that just started is sitting at its prompt — idle, not
+      // busy. The exception is source=compact, which fires mid-turn while
+      // the agent is actively working.
+      const atRest = input.source !== "compact"
+      advertise(atRest ? "idle" : "busy", undefined, [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "))
       await post("/sessions/register", {
         id,
         ...(name !== undefined ? { agent: name } : {}),
@@ -203,7 +244,22 @@ const main = async () => {
         return
       }
       const toolInput =
-        typeof input.tool_input === "object" && input.tool_input !== null ? input.tool_input : {}
+        typeof input.tool_input === "object" && input.tool_input !== null
+          ? (input.tool_input as Record<string, unknown>)
+          : {}
+      // The humans tools declare intent, so advertise it live. ask/approve
+      // block until the human responds and no other hook fires meanwhile, so
+      // the label set here holds for the whole wait; PostToolUse returns the
+      // pane to busy when the call resolves. signal is a turn-end declaration:
+      // stash it for Stop to promote.
+      if (input.tool_name === "mcp__humans__ask") {
+        const q = typeof toolInput.question === "string" ? toolInput.question : ""
+        advertise("message", q ? `asks: ${q.trim().slice(0, 120)}` : "needs decision")
+      } else if (input.tool_name === "mcp__humans__approve") {
+        advertise("message", "approval requested")
+      } else if (input.tool_name === "mcp__humans__signal") {
+        if (typeof toolInput.status === "string") writeSignal(id, toolInput.status)
+      }
       console.log(
         JSON.stringify({
           hookSpecificOutput: {
@@ -215,6 +271,7 @@ const main = async () => {
       return
     }
     case "UserPromptSubmit": {
+      clearSignal(id) // the human has acted; the declared turn-end label is spent
       advertise("busy")
       await post(`/sessions/${encoded}/status`, { status: "working" })
       const session = await getSessionInfo(encoded)
@@ -260,12 +317,27 @@ const main = async () => {
       )
       return
     }
-    case "Stop":
-      // Roster semantics: idle. mux semantics: the turn ended, a human is
-      // needed to move things forward.
-      advertise("waiting", "awaiting your reply")
-      await post(`/sessions/${encoded}/status`, { status: "idle" })
+    case "Stop": {
+      // A declared signal (mcp__humans__signal) ends the turn as a message —
+      // the agent left the human something, the detail says what. An
+      // unsignalled stop honestly doesn't know whether the human is needed,
+      // so it rests at idle rather than faking urgency.
+      const signal = readSignal(id)
+      if (signal === "question") {
+        advertise("message", "needs direction")
+        await post(`/sessions/${encoded}/status`, {
+          status: "needs-attention",
+          detail: "asked a question — see chat"
+        })
+      } else if (signal === "done") {
+        advertise("message", "done")
+        await post(`/sessions/${encoded}/status`, { status: "idle" })
+      } else {
+        advertise("idle")
+        await post(`/sessions/${encoded}/status`, { status: "idle" })
+      }
       return
+    }
     case "Notification": {
       // Notification fires for MORE than permission prompts — notably the
       // "Claude is waiting for your input" idle notification (~60s after
@@ -276,19 +348,23 @@ const main = async () => {
       const text = typeof input.message === "string" ? input.message : ""
       if (/permission/i.test(text)) {
         // The notification text rides along as the roster "blocked" label.
-        advertise("waiting", text.trim().slice(0, 200))
+        advertise("message", text.trim().slice(0, 200))
         await post(`/sessions/${encoded}/status`, {
           status: "needs-attention",
           detail: text.trim().slice(0, 200)
         })
       } else if (/waiting for your input/i.test(text)) {
-        advertise("waiting", "waiting for your input")
-        await post(`/sessions/${encoded}/status`, { status: "idle" })
+        // A declared turn-end signal outranks the generic idle rewrite.
+        if (readSignal(id) === undefined) {
+          advertise("idle")
+          await post(`/sessions/${encoded}/status`, { status: "idle" })
+        }
       }
       return
     }
     case "SessionEnd":
       clearMarker(id)
+      clearSignal(id)
       advertise(null, undefined, null)
       await post(`/sessions/${encoded}/end`)
       return

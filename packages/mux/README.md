@@ -43,13 +43,13 @@ one ranked list.
 mux is the protocol; tmux is the bundled backend (see `src/backend.ts` for
 the seam). mux never inspects what runs in a pane — processes advertise their
 own state by setting tmux **pane user options**, and mux rolls them up
-pane → window → session (priority: `waiting` > `error` > `busy` > `idle`).
+pane → window → session (priority: `error` > `message` > `busy` > `idle`).
 
 From inside the pane in question:
 
 ```sh
-# I need a human:
-tmux set-option -p @humans_status waiting
+# I left the human something (detail says what):
+tmux set-option -p @humans_status message
 tmux set-option -p @humans_detail "approve the migration plan?"
 
 # I'm working again:
@@ -60,8 +60,11 @@ tmux set-option -pu @humans_status
 tmux set-option -pu @humans_detail
 ```
 
-- `@humans_status` — one word: `waiting`, `busy`, `error`, `idle` (freeform
-  tolerated; unknown values render dim).
+- `@humans_status` — one word: `message` (the agent needs or left the human
+  something; blue ● with the detail as its label), `busy` (amber ●), `error`
+  (red ✗), `idle` (an agent is present, at rest; blue ● with no label — plain
+  panes advertise nothing and render dim). Freeform tolerated; unknown values
+  render dim.
 - `@humans_detail` — optional one-line human-readable context. Control
   characters are stripped at ingress.
 - `@humans_agent` — optional identity of the agent in the pane (e.g.
@@ -73,10 +76,11 @@ tmux set-option -pu @humans_detail
 ### Claude Code
 
 [@humans/cc-plugin](../cc-plugin) advertises automatically: sessions appear
-with their agent identity and model, turn `busy` while working, and `waiting`
-(with the reason — permission prompt, awaiting reply) whenever a human is
-needed. This works even with no humans.sh server running; the tmux options
-are a second, server-independent signal plane.
+with their agent identity and model, turn `busy` while working, `message`
+(with the reason — needs direction, done, permission prompt, a blocking ask)
+when the agent has declared something for the human, and `idle` at an
+unsignalled rest. This works even with no humans.sh server running; the tmux
+options are a second, server-independent signal plane.
 
 ## Development
 

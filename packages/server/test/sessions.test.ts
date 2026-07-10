@@ -70,7 +70,9 @@ const getSession = async (id: string): Promise<Session> => {
 
 const runHook = async (input: Record<string, unknown>, env?: Record<string, string>) => {
   const hookProc = Bun.spawn(["bun", "run", HOOK], {
-    env: { ...process.env, HUMANS_URL: BASE, HUMANS_STATE_DIR: STATE, ...env },
+    // TMUX_PANE is cleared so hook runs never advertise onto the real pane
+    // this test suite happens to run inside.
+    env: { ...process.env, TMUX_PANE: "", HUMANS_URL: BASE, HUMANS_STATE_DIR: STATE, ...env },
     stdin: new TextEncoder().encode(JSON.stringify(input)),
     stdout: "pipe",
     stderr: "pipe"
@@ -102,7 +104,7 @@ test("session lifecycle: register -> status -> bind via WS -> end", async () => 
   expect(registerRes.ok).toBe(true)
   const registered = (await registerRes.json()) as Session
   expect(registered.agent).toBe("humans.sh-sess")
-  expect(registered.status).toBe("working")
+  expect(registered.status).toBe("idle") // at its prompt until a prompt/tool says otherwise
   expect(registered.bound).toBe(false)
 
   const registeredEvent = await waitFor(() =>
@@ -201,7 +203,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   expect(session.agent).toBe("my-project-hook")
   expect(session.project).toBe(cwd)
   expect(session.model).toBe("Fable")
-  expect(session.status).toBe("working")
+  expect(session.status).toBe("idle") // freshly started = at the prompt
 
   // Stop -> idle
   const stop = await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
@@ -383,6 +385,61 @@ test("needs-attention is a roster label: detail stored, cleared, never a queue m
   expect(events.some((e) => e.type === "message.new" && e.message.agent === "na-bot")).toBe(false)
   ws.close()
 }, 15_000)
+
+test("a declared signal shapes the Stop status and survives the idle notification", async () => {
+  const id = "hook-sig-1"
+  const cwd = "/Users/me/code/my-project"
+  await runHook({ session_id: id, cwd, hook_event_name: "SessionStart" })
+
+  // signal(question) → Stop promotes it to needs-attention with a label.
+  const pre = await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__humans__signal",
+    tool_input: { status: "question" }
+  })
+  expect(pre.exitCode).toBe(0)
+  const stamped = JSON.parse(pre.stdout) as {
+    hookSpecificOutput: { updatedInput: Record<string, unknown> }
+  }
+  expect(stamped.hookSpecificOutput.updatedInput.sessionId).toBe(id) // stamp still applies
+  await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
+  const asked = await getSession(id)
+  expect(asked.status).toBe("needs-attention")
+  expect(asked.detail).toContain("question")
+
+  // The ~60s idle notification must not stomp the declared label.
+  await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "Notification",
+    message: "Claude is waiting for your input"
+  })
+  expect((await getSession(id)).status).toBe("needs-attention")
+
+  // The human replying spends the signal: the next Stop is a plain idle.
+  await runHook({ session_id: id, cwd, hook_event_name: "UserPromptSubmit", prompt: "answer" })
+  expect((await getSession(id)).status).toBe("working")
+  await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
+  const plain = await getSession(id)
+  expect(plain.status).toBe("idle")
+  expect(plain.detail).toBeUndefined()
+
+  // signal(done) → Stop maps to idle (the distinction lives in the mux plane).
+  await runHook({ session_id: id, cwd, hook_event_name: "UserPromptSubmit", prompt: "go" })
+  await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__humans__signal",
+    tool_input: { status: "done" }
+  })
+  await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
+  expect((await getSession(id)).status).toBe("idle")
+
+  await runHook({ session_id: id, cwd, hook_event_name: "SessionEnd" })
+}, 20_000)
 
 test("hook script is silent and exits 0 when the server is down", async () => {
   const result = await runHook(

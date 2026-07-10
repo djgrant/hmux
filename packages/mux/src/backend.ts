@@ -6,7 +6,7 @@
  *   tmux is the bundled default (see tmux.ts).
  */
 
-export type Status = "waiting" | "busy" | "error" | "idle" | (string & {})
+export type Status = "message" | "busy" | "error" | "idle" | (string & {})
 
 export interface WindowEntry {
   /** Backend-opaque handle passed back to open(). */
@@ -69,8 +69,8 @@ export interface Backend {
   kill(session: string): Promise<void>
 }
 
-/** waiting beats error beats busy beats idle beats unadvertised. */
-const PRIORITY: Record<string, number> = { waiting: 4, error: 3, busy: 2, idle: 1 }
+/** error beats message beats busy beats idle/unadvertised. */
+const PRIORITY: Record<string, number> = { error: 3, message: 2, busy: 1, idle: 0 }
 
 export function topStatus(
   items: Array<{ status: Status | null; detail: string | null }>,

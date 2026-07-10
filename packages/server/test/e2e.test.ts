@@ -280,6 +280,37 @@ test("a blocked tool call keeps the matching session's lastSeen fresh", async ()
   ws.close()
 }, 15_000)
 
+test("signal returns immediately, touches the session, publishes no message", async () => {
+  const registerRes = await fetch(`${BASE}/sessions/register`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "sig-sess", agent: "sig-bot", project: "/sig/proj" })
+  })
+  const before = ((await registerRes.json()) as { lastSeen: number }).lastSeen
+  await Bun.sleep(5)
+
+  const { ws, events, open } = connectWs()
+  await open
+  const client = await connectMcp()
+  const result = (await client.callTool({
+    name: "signal",
+    arguments: { status: "question", sessionId: "sig-sess" }
+  })) as { content: Array<{ type: string; text: string }> }
+  expect(result.content[0]?.text).toContain("question")
+
+  // A signal is a label, not a message: nothing lands in the inbox.
+  await Bun.sleep(300)
+  expect(events.some((e) => e.type === "message.new" && e.message.agent === "sig-bot")).toBe(false)
+  // But identity resolution doubles as a liveness touch.
+  const touched = (await (await fetch(`${BASE}/sessions/sig-sess`)).json()) as {
+    lastSeen: number
+  }
+  expect(touched.lastSeen).toBeGreaterThan(before)
+
+  await client.close()
+  ws.close()
+}, 15_000)
+
 test("notify returns immediately and shows up as pending", async () => {
   const { ws, events, open } = connectWs()
   await open

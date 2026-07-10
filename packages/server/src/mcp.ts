@@ -292,6 +292,36 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
     }
   )
 
+  server.registerTool(
+    "signal",
+    {
+      title: "Signal how your turn is ending",
+      description:
+        "Declare what state your turn ends in, so the human's dashboard can label it. Call " +
+        "this just before ending your turn — it carries NO content; your chat response is " +
+        "the content. Use status 'question' when your response asks the human something and " +
+        "you need their answer to continue; use 'done' when the work is complete and nothing " +
+        "is needed from the human. Returns immediately. (For a mid-task question that should " +
+        "block while you wait, use the ask tool instead.)",
+      inputSchema: {
+        status: z
+          .enum(["done", "question"])
+          .describe(
+            "'question' — your response asks for direction; 'done' — finished, nothing needed"
+          ),
+        sessionId: sessionIdSchema
+      }
+    },
+    async ({ status, sessionId }) => {
+      // The signal itself is delivered out-of-band: the Claude Code plugin's
+      // PreToolUse hook sees this call and advertises the label into the mux
+      // plane at Stop. Server-side there is nothing to publish — no inbox
+      // message, no blocking — so this handler is just an identity touch.
+      await resolveIdentity(sessionId)
+      return { content: [{ type: "text", text: `Turn signalled as '${status}'.` }] }
+    }
+  )
+
   return server
 }
 

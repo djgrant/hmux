@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { App } from "../src/App"
-import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzyScore, selectTarget, moveSelection, setBackend, refresh } from "../src/store"
+import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzyScore, selectTarget, moveSelection, setBackend, refresh, jumpToNeedsYou } from "../src/store"
 import type { Backend, DisplayTarget, SessionGroup } from "../src/backend"
 
 const opened: string[] = []
@@ -30,10 +30,10 @@ function seed() {
       name: "api",
       dir: "~/Repos/api",
       attached: true,
-      status: "waiting",
+      status: "message",
       detail: "approve the plan?",
       windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, paneCount: 2, status: "waiting", detail: "approve the plan?" },
+        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, paneCount: 2, status: "message", detail: "approve the plan?" },
         { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, active: false, paneCount: 1, status: "busy", detail: null },
       ],
     },
@@ -105,16 +105,17 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   expect(rows().length).toBe(4)
   expect(selectedRow()?.target).toBe("api:1")
 
-  // Arrow selection + ctrl+x kill confirm flow.
+  // Arrow selection + ctrl+x kill confirm flow. On a window row it kills just
+  // that window (target "session:index"), not the whole session.
   setup.mockInput.pressArrow("down")
   await settle()
   expect(selectedRow()?.target).toBe("api:2")
   setup.mockInput.pressKey("x", { ctrl: true })
   await settle()
-  expect(setup.captureCharFrame()).toContain("kill session api?")
+  expect(setup.captureCharFrame()).toContain("kill window server?")
   setup.mockInput.pressKey("y")
   await settle()
-  expect(killed).toEqual(["api"])
+  expect(killed).toEqual(["api:2"])
 })
 
 test("prompt overlay: ^n creates, ^r renames", async () => {
@@ -180,6 +181,33 @@ test("parked cursor follows the attached session's active window", async () => {
   list = group(1)
   await refresh()
   expect(selectedRow()?.target).toBe("api:2")
+})
+
+test("left/right jump to the nearest session that wants you", async () => {
+  // web (message) · api (busy + idle, skipped) · ops (error).
+  setGroups([
+    { target: "web", name: "web", dir: "~", attached: false, status: "message", detail: null,
+      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: "message", detail: null }] },
+    { target: "api", name: "api", dir: "~", attached: false, status: "busy", detail: null,
+      windows: [
+        { target: "api:1", session: "api", name: "claude", dir: "~", agent: null, active: true, paneCount: 1, status: "busy", detail: null },
+        { target: "api:2", session: "api", name: "server", dir: "~", agent: null, active: false, paneCount: 1, status: "idle", detail: null },
+      ] },
+    { target: "ops", name: "ops", dir: "~", attached: false, status: "error", detail: null,
+      windows: [{ target: "ops:1", session: "ops", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: "error", detail: null }] },
+  ])
+  updateQuery("")
+  setSelected(0)
+  // Rows: web · api · api:1 · api:2 · ops. Only session headers count; the busy
+  // api header is skipped. From web, right lands on ops; right again wraps to web.
+  expect(rows().map((r) => r.target)).toEqual(["web", "api", "api:1", "api:2", "ops"])
+  jumpToNeedsYou(1)
+  expect(selectedRow()?.target).toBe("ops")
+  jumpToNeedsYou(1)
+  expect(selectedRow()?.target).toBe("web")
+  // Left walks back the other way, wrapping to ops.
+  jumpToNeedsYou(-1)
+  expect(selectedRow()?.target).toBe("ops")
 })
 
 test("fuzzyScore: substring beats subsequence, misses rejected", () => {

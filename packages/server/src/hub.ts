@@ -19,7 +19,7 @@ const deriveAgent = (input: RegisterSessionInput): string => {
 const quietSession = (id: string): Session => ({
   id,
   agent: deriveAgent({ id }),
-  status: "working",
+  status: "idle",
   bound: false,
   startedAt: Date.now(),
   lastSeen: Date.now()
@@ -136,8 +136,11 @@ export const HubLive = Layer.effect(
             id: input.id,
             agent: input.agent ?? deriveAgent(input),
             ...(input.project !== undefined ? { project: input.project } : {}),
+            // A session registers the moment it starts, i.e. sitting at its
+            // prompt — idle until a prompt or tool call says otherwise. (On
+            // conflict the stored status wins anyway; see Store.)
             ...(input.model !== undefined ? { model: input.model } : {}),
-            status: "working",
+            status: "idle",
             bound: false,
             startedAt: now,
             lastSeen: now
