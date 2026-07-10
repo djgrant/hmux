@@ -5,24 +5,23 @@
  *   1. xterm window-ops "raise" written straight to the target's tty — the
  *      emulator interprets it if its prefs allow (iTerm: "Terminal may
  *      raise/lower windows"; Ghostty ignores window ops).
- *   2. AppleScript keyed off TERM_PROGRAM captured at registration. iTerm
- *      and Ghostty get exact tab/window selection: we stamp a unique title
- *      onto the target through its tty, find the session/surface by name,
- *      select it, and clear the stamp. Matching by title rather than tty
- *      survives pty-nesting wrappers (kiro, script, etc.) where the tty the
- *      target sees isn't the one the terminal app knows about. Other known
- *      apps get app-level activation (no-op when the picker is in the same
- *      app — they expose no way to select a tab).
- *      First run prompts for Automation permission.
+ *   2. One general mechanism, stamp-and-focus: write a unique title onto the
+ *      target through its tty, find the tab by name via the app's scripting
+ *      interface, select it, clear the stamp. Matching by title rather than
+ *      tty survives pty-nesting wrappers (kiro, script, etc.) where the tty
+ *      the target sees isn't the one the terminal app knows about. Only the
+ *      final "select by name" verb is app-specific (each scripting
+ *      dictionary differs) — see STRATEGIES. Apps without a tab-selection
+ *      API get app-level activation (no-op when the picker is in the same
+ *      app). First run prompts for macOS Automation permission.
  */
 import { writeFileSync } from "node:fs"
 import type { DisplayTarget } from "./backend"
 
-const APP_NAMES: Record<string, string> = {
-  Apple_Terminal: "Terminal",
-  WezTerm: "WezTerm",
-  vscode: "Visual Studio Code",
-}
+// The stamp delay does double duty: lets the terminal ingest the new title,
+// and lets tmux finish redrawing the switched session so the tab doesn't
+// come forward mid-paint (visible flash in Ghostty).
+const SETTLE_MS = 350
 
 // iTerm may suffix the title (e.g. "… (tmux)"), so match by containment.
 const iTermSelectByName = (marker: string) => `
@@ -51,6 +50,19 @@ tell application "Ghostty"
   end repeat
 end tell`
 
+/** Apps we can select an exact tab in; anything else falls back to activate. */
+const STRATEGIES: Record<string, (marker: string) => string> = {
+  "iTerm.app": iTermSelectByName,
+  ghostty: ghosttyFocusByName,
+}
+
+/** Apps with no tab-selection API: bring the app forward, best we can do. */
+const APP_NAMES: Record<string, string> = {
+  Apple_Terminal: "Terminal",
+  WezTerm: "WezTerm",
+  vscode: "Visual Studio Code",
+}
+
 async function osascript(script: string): Promise<void> {
   const proc = Bun.spawn(["osascript", "-e", script], { stdout: "ignore", stderr: "ignore" })
   await proc.exited.catch(() => {})
@@ -64,7 +76,7 @@ async function stampAndFocus(tty: string, script: (marker: string) => string): P
   } catch {
     return
   }
-  await Bun.sleep(200) // let the terminal pick up the title before we query it
+  await Bun.sleep(SETTLE_MS)
   await osascript(script(marker))
   try {
     writeFileSync(tty, "\x1b]0;\x07") // back to the terminal's automatic title
@@ -76,8 +88,8 @@ export async function focusTarget(client: DisplayTarget): Promise<void> {
     writeFileSync(client.tty, "\x1b[5t")
   } catch {}
   if (process.platform !== "darwin" || !client.program) return
-  if (client.program === "iTerm.app") return stampAndFocus(client.tty, iTermSelectByName)
-  if (client.program === "ghostty") return stampAndFocus(client.tty, ghosttyFocusByName)
+  const strategy = STRATEGIES[client.program]
+  if (strategy) return stampAndFocus(client.tty, strategy)
   const app = APP_NAMES[client.program]
   if (app) await osascript(`tell application "${app}" to activate`)
 }
