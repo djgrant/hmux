@@ -15,38 +15,39 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             statusRow
-            Divider()
+            Divider().padding(.vertical, 4)
 
-            Button {
-                state.openTui()
-            } label: {
+            MenuRow(action: { state.openTui() }) {
                 Label("Open TUI", systemImage: "arrow.up.forward.app")
             }
 
-            Button {
-                state.toggleServer()
-            } label: {
+            MenuRow(action: { state.toggleServer() }) {
                 Label(state.serverRunning ? "Stop server" : "Start server",
                       systemImage: state.serverRunning ? "stop.circle" : "play.circle")
             }
 
-            Divider()
+            Divider().padding(.vertical, 4)
 
             sessionsSection
 
-            Toggle(isOn: $settings.muted) {
+            MenuRow(action: { settings.muted.toggle() }) {
                 Label("Mute notifications", systemImage: settings.muted ? "bell.slash" : "bell")
+                Spacer()
+                if settings.muted {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
-            .toggleStyle(.checkbox)
 
             if !state.notificationsAuthorized {
-                Button {
+                MenuRow(action: {
                     if state.notificationsDenied {
                         state.openNotificationSettings()
                     } else {
                         state.requestNotificationAuthorization()
                     }
-                } label: {
+                }) {
                     Label(state.notificationsDenied
                             ? "Notifications denied — open Settings"
                             : "Enable notifications…",
@@ -55,15 +56,27 @@ struct MenuBarView: View {
                 }
             }
 
-            Divider()
+            Divider().padding(.vertical, 4)
 
-            Button("Preferences…") { openPrefs() }
-                .keyboardShortcut(",", modifiers: .command)
-            if !settings.hasOnboarded {
-                Button("Set up humans.sh…") { openWindow(id: "onboarding") }
+            MenuRow(action: { openPrefs() }) {
+                Text("Preferences…")
+                Spacer()
+                Text("⌘,").foregroundStyle(.tertiary)
             }
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .keyboardShortcut("q", modifiers: .command)
+            .keyboardShortcut(",", modifiers: .command)
+
+            if !settings.hasOnboarded {
+                MenuRow(action: { openWindow(id: "onboarding") }) {
+                    Text("Set up humans.sh…")
+                }
+            }
+
+            MenuRow(action: { NSApplication.shared.terminate(nil) }) {
+                Text("Quit")
+                Spacer()
+                Text("⌘Q").foregroundStyle(.tertiary)
+            }
+            .keyboardShortcut("q", modifiers: .command)
         }
         .padding(6)
         .frame(width: 260)
@@ -76,11 +89,13 @@ struct MenuBarView: View {
                 .frame(width: 9, height: 9)
             Text(statusText)
             Spacer()
-            Text(":\(settings.port)")
+            // verbatim: interpolating an Int into Text goes through the locale
+            // formatter and turns 7373 into "7,373".
+            Text(verbatim: ":\(settings.port)")
                 .foregroundStyle(.secondary)
                 .font(.system(.caption, design: .monospaced))
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 8)
         .padding(.vertical, 4)
     }
 
@@ -90,14 +105,14 @@ struct MenuBarView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .padding(.top, 2)
 
         if state.sessions.isEmpty {
             Text(state.connected ? "None yet" : "Server offline")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         } else {
             ForEach(state.sessions) { session in
@@ -110,11 +125,11 @@ struct MenuBarView: View {
                         .foregroundStyle(session.status == .needsAttention ? Color.green : .secondary)
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 2)
             }
         }
-        Divider()
+        Divider().padding(.vertical, 4)
     }
 
     private var statusColor: Color {
@@ -133,5 +148,36 @@ struct MenuBarView: View {
     private func openPrefs() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "settings")
+    }
+}
+
+// Full-width menu-item-style row: plain content, hover highlight, consistent
+// insets — what a window-style MenuBarExtra doesn't give Buttons for free.
+private struct MenuRow<Content: View>: View {
+    let action: () -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var hovering = false
+
+    init(action: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
+        self.action = action
+        self.content = content
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                content()
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(hovering ? Color.primary.opacity(0.08) : Color.clear)
+        )
+        .onHover { hovering = $0 }
     }
 }
