@@ -16,7 +16,7 @@ Or from anything that can run a shell:
 humans-focus /dev/ttys012 iTerm.app
 ```
 
-A process running in the target terminal can read both values: the `tty` command prints the tty, and the `TERM_PROGRAM` environment variable names the program.
+The arguments are read in the terminal that will be focused: the `tty` command prints the tty, and the `TERM_PROGRAM` environment variable names the program.
 
 ## How it works
 
