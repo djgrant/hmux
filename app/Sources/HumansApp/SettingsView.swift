@@ -70,10 +70,10 @@ struct SettingsView: View {
             }
             Section {
                 LabeledContent("Open-TUI command") {
-                    TextField("auto", text: $settings.openTuiCommand)
+                    TextField("", text: $settings.openTuiCommand)
                 }
             } footer: {
-                Text("Runs when you click a notification or “Open TUI”. Leave empty for the default: launch the TUI from the repo in \(FileManager.default.fileExists(atPath: "/Applications/iTerm.app") ? "iTerm" : "Terminal"). Custom commands run via zsh -lc, so your PATH and aliases apply.")
+                Text("Runs via zsh -lc when you click a notification or “Open TUI”, so your PATH and aliases apply.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

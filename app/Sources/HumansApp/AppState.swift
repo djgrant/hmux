@@ -52,6 +52,7 @@ final class AppState: ObservableObject {
         }
 
         refreshNotificationAuth()
+        prefillOpenTuiCommandIfNeeded()
         connection.connect()
         // If the app was launched at login and setup is done, bring the server up.
         if settings.hasOnboarded && !settings.repoPath.isEmpty {
@@ -151,54 +152,16 @@ final class AppState: ObservableObject {
     // MARK: - Actions
 
     func openTui() {
-        let custom = settings.openTuiCommand.trimmingCharacters(in: .whitespaces)
-        if !custom.isEmpty {
-            runShell(custom)
-            return
-        }
-        launchTuiInTerminal()
+        runShell(settings.openTuiCommand)
     }
 
-    // Default "Open TUI": actually run the TUI, in the user's terminal — an
-    // empty terminal window is not the product. Prefers iTerm when installed.
-    private func launchTuiInTerminal() {
-        guard !settings.repoPath.isEmpty else {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
-            return
-        }
-        let cmd = "cd \(settings.repoPath)/packages/tui && exec bun run src/index.tsx"
-        let script: String
-        if FileManager.default.fileExists(atPath: "/Applications/iTerm.app") {
-            // `create window … command "…"` does not shell-parse its string, so
-            // type the command into a fresh window's shell instead.
-            script = """
-            tell application "iTerm"
-                activate
-                set w to (create window with default profile)
-                tell current session of w to write text \(appleScriptQuoted(cmd))
-            end tell
-            """
-        } else {
-            script = """
-            tell application "Terminal"
-                activate
-                do script \(appleScriptQuoted(cmd))
-            end tell
-            """
-        }
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
-        if let error {
-            NSLog("humans.sh: open TUI failed: \(error)")
-        }
-    }
-
-    // Quote a string for embedding in an AppleScript source literal.
-    private func appleScriptQuoted(_ s: String) -> String {
-        let escaped = s
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        return "\"\(escaped)\""
+    // Fill openTuiCommand with the concrete default once the repo path exists,
+    // so Settings always shows the real, editable command — no hidden "auto".
+    private func prefillOpenTuiCommandIfNeeded() {
+        guard !settings.repoPath.isEmpty,
+              settings.openTuiCommand.trimmingCharacters(in: .whitespaces).isEmpty
+        else { return }
+        settings.openTuiCommand = settings.defaultOpenTuiCommand
     }
 
     func copyMcpEndpoint() {
@@ -241,6 +204,7 @@ final class AppState: ObservableObject {
         panel.prompt = "Choose humans.sh repo"
         if panel.runModal() == .OK, let url = panel.url {
             settings.repoPath = url.path
+            prefillOpenTuiCommandIfNeeded()
         }
     }
 

@@ -165,10 +165,13 @@ private struct MenuRow<Content: View>: View {
 
     var body: some View {
         Button(action: action) {
+            // No Spacer here: rows that right-align a trailing element (shortcut
+            // hint, checkmark) bring their own, and two spacers would split the
+            // slack and strand the trailing element mid-row.
             HStack(spacing: 6) {
                 content()
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .contentShape(Rectangle())

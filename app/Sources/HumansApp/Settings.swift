@@ -18,9 +18,23 @@ final class AppSettings: ObservableObject {
     // and the TUI. Chosen once during onboarding.
     @AppStorage("repoPath") var repoPath: String = ""
 
-    // Command run when the user clicks a notification or "Open TUI". Empty
-    // means auto: launch the TUI from the repo in iTerm (or Terminal).
+    // Command run when the user clicks a notification or "Open TUI". Prefilled
+    // with defaultOpenTuiCommand once the repo path is known; always visible
+    // and editable in Settings › Advanced.
     @AppStorage("openTuiCommand") var openTuiCommand: String = ""
+
+    // Launch the TUI in a fresh iTerm window (Terminal fallback). iTerm's
+    // `command` parameter doesn't shell-parse, hence `write text`.
+    var defaultOpenTuiCommand: String {
+        let run = "cd \(repoPath)/packages/tui && exec bun run src/index.tsx"
+        if FileManager.default.fileExists(atPath: "/Applications/iTerm.app") {
+            return "osascript -e 'tell application \"iTerm\" to activate' "
+                + "-e 'tell application \"iTerm\" to tell current session of "
+                + "(create window with default profile) to write text \"\(run)\"'"
+        }
+        return "osascript -e 'tell application \"Terminal\" to activate' "
+            + "-e 'tell application \"Terminal\" to do script \"\(run)\"'"
+    }
 
     var mcpEndpoint: String { "http://localhost:\(port)\(mcpPath)" }
     var wsURL: URL { URL(string: "ws://localhost:\(port)\(wsPath)")! }
