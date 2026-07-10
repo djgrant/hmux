@@ -183,24 +183,21 @@ test("parked cursor follows the attached session's active window", async () => {
   expect(selectedRow()?.target).toBe("api:2")
 })
 
-test("left/right jump to the nearest session that wants you", async () => {
-  // web (message) · api (busy + idle, skipped) · ops (error).
+test("left/right jump to sessions with an advertised agent, skipping bare shells", async () => {
+  // web (busy) · shell (unadvertised, skipped) · ops (error).
   setGroups([
-    { target: "web", name: "web", dir: "~", attached: false, status: "message", detail: null,
-      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: "message", detail: null }] },
-    { target: "api", name: "api", dir: "~", attached: false, status: "busy", detail: null,
-      windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~", agent: null, active: true, paneCount: 1, status: "busy", detail: null },
-        { target: "api:2", session: "api", name: "server", dir: "~", agent: null, active: false, paneCount: 1, status: "idle", detail: null },
-      ] },
+    { target: "web", name: "web", dir: "~", attached: false, status: "busy", detail: null,
+      windows: [{ target: "web:1", session: "web", name: "claude", dir: "~", agent: null, active: true, paneCount: 1, status: "busy", detail: null }] },
+    { target: "shell", name: "shell", dir: "~", attached: false, status: null, detail: null,
+      windows: [{ target: "shell:1", session: "shell", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: null, detail: null }] },
     { target: "ops", name: "ops", dir: "~", attached: false, status: "error", detail: null,
       windows: [{ target: "ops:1", session: "ops", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: "error", detail: null }] },
   ])
   updateQuery("")
   setSelected(0)
-  // Rows: web · api · api:1 · api:2 · ops. Only session headers count; the busy
-  // api header is skipped. From web, right lands on ops; right again wraps to web.
-  expect(rows().map((r) => r.target)).toEqual(["web", "api", "api:1", "api:2", "ops"])
+  // Only session headers count, and the unadvertised shell is skipped. From
+  // web, right lands on ops; right again wraps to web.
+  expect(rows().map((r) => r.target)).toEqual(["web", "shell", "ops"])
   jumpToNeedsYou(1)
   expect(selectedRow()?.target).toBe("ops")
   jumpToNeedsYou(1)

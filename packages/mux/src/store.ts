@@ -111,9 +111,9 @@ export function moveSelection(delta: number) {
   setSelected(((selected() + delta) % n + n) % n)
 }
 
-/** An agent has stopped working — left you a message, errored, or gone idle. */
+/** An agent is present here — any advertised status, however it's doing. */
 function needsYou(r: Row): boolean {
-  return r.status === "message" || r.status === "error" || r.status === "idle"
+  return r.status != null
 }
 
 /**
