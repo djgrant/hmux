@@ -7,9 +7,13 @@ export const GUTTER = "#4a4a4a"
 export const HIGHLIGHT_BG = "#3a3a3a"
 export const SIDEBAR_BG = "#0a0a0a"
 export const MAIN_BG = "#151a1d"
-/** Advertised-status accents. */
-export const WAITING = "#d8a15f"
-export const BUSY = "#6f9f6f"
+/**
+ * Advertised-status accents. Amber for busy (work in progress, not "all
+ * good" — green would read as done), blue for waiting (calm "your turn",
+ * distinct from the alarm colors), red for error.
+ */
+export const WAITING = "#6fa3d8"
+export const BUSY = "#d8a15f"
 export const ERROR = "#d87070"
 
 export function statusColor(status: string | null): string {
