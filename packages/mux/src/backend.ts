@@ -66,7 +66,8 @@ export interface Backend {
   create(name: string): Promise<void>
   /** Rename a session ("name") or a window ("name:index"). */
   rename(target: string, to: string): Promise<void>
-  kill(session: string): Promise<void>
+  /** Kill a session ("name") or a single window ("name:index"). */
+  kill(target: string): Promise<void>
 }
 
 /** error beats message beats busy beats idle/unadvertised. */

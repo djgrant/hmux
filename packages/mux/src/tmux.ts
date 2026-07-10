@@ -259,7 +259,8 @@ export class TmuxBackend implements Backend {
     await tmux([verb, "-t", target, to])
   }
 
-  async kill(session: string): Promise<void> {
-    await tmux(["kill-session", "-t", session])
+  async kill(target: string): Promise<void> {
+    const verb = target.includes(":") ? "kill-window" : "kill-session"
+    await tmux([verb, "-t", target])
   }
 }

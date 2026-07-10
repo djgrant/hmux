@@ -3,6 +3,7 @@ import { useKeyboard, useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import type { Backend } from "./backend"
 import {
+  jumpToNeedsYou,
   mode,
   moveSelection,
   query,
@@ -77,7 +78,7 @@ export function App(props: {
     if (m.kind === "confirm-kill") {
       key.preventDefault()
       if (key.name === "y") {
-        props.backend.kill(m.session).then(refresh)
+        props.backend.kill(m.target).then(refresh)
         setMode({ kind: "list" })
       } else if (key.name !== "return") {
         setMode({ kind: "list" })
@@ -103,6 +104,10 @@ export function App(props: {
         const next = selectedRow()
         if (next) peek(next.target)
       }
+    } else if (key.name === "left" || key.name === "right") {
+      // Skip to the nearest session that isn't working — one up on left, one
+      // down on right — so a full board can be cleared without hunting.
+      jumpToNeedsYou(key.name === "left" ? -1 : 1)
     } else if (key.name === "return" && row) {
       key.preventDefault()
       open(row.target)
@@ -130,7 +135,9 @@ export function App(props: {
         onSubmit: (text) => props.backend.rename(row.target, text).then(refresh),
       })
     } else if (key.ctrl && key.name === "x" && row) {
-      setMode({ kind: "confirm-kill", session: row.session })
+      // Kills the row under the cursor: window rows kill just that window,
+      // session rows the whole session (mirrors ^r rename's target routing).
+      setMode({ kind: "confirm-kill", target: row.target, label: row.label, isWindow: row.kind === "window" })
     } else if (key.ctrl && key.name === "c") {
       renderer.destroy()
       process.exit(0)
@@ -198,7 +205,7 @@ export function App(props: {
       {/* Footer */}
       <box flexShrink={0}>
         <text wrapMode="none" truncate fg={FAINT}>
-          ⏎ open · ⌥↑↓ peek · ^n new · ^r rename · ^x kill
+          ⏎ open · ⌥↑↓ peek · ←→ needs you · ^n new · ^r rename · ^x kill
         </text>
       </box>
 
@@ -265,7 +272,7 @@ export function App(props: {
             paddingLeft={1}
             paddingRight={1}
           >
-            <text fg={BODY}>kill session {m.session}? y / any key to cancel</text>
+            <text fg={BODY}>kill {m.isWindow ? "window" : "session"} {m.label}? y / any key to cancel</text>
           </box>
         )}
       </Show>

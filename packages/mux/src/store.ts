@@ -9,7 +9,7 @@ export const [selected, setSelected] = createSignal(0)
 export type Mode =
   | { kind: "list" }
   | { kind: "prompt"; label: string; initial: string; onSubmit: (text: string) => void }
-  | { kind: "confirm-kill"; session: string }
+  | { kind: "confirm-kill"; target: string; label: string; isWindow: boolean }
 export const [mode, setMode] = createSignal<Mode>({ kind: "list" })
 
 /**
@@ -109,6 +109,36 @@ export function moveSelection(delta: number) {
   if (n === 0) return
   parked = false
   setSelected(((selected() + delta) % n + n) % n)
+}
+
+/** An agent has stopped working — left you a message, errored, or gone idle. */
+function needsYou(r: Row): boolean {
+  return r.status === "message" || r.status === "error" || r.status === "idle"
+}
+
+/**
+ * Left/right jump between sessions that want you — the nearest one up
+ * (-1) or down (+1), wrapping. In the tree we land on session headers only
+ * (their status is rolled up from the windows); while filtering, every row is
+ * a window, so we consider them all.
+ */
+export function jumpToNeedsYou(direction: 1 | -1) {
+  const rs = rows()
+  if (rs.length === 0) return
+  const inTree = query().trim().length === 0
+  const hits: number[] = []
+  for (let i = 0; i < rs.length; i++) {
+    if (inTree && rs[i].kind !== "session") continue
+    if (needsYou(rs[i])) hits.push(i)
+  }
+  if (hits.length === 0) return
+  parked = false
+  const cur = selected()
+  const target =
+    direction === 1
+      ? (hits.find((i) => i > cur) ?? hits[0])
+      : ([...hits].reverse().find((i) => i < cur) ?? hits[hits.length - 1])
+  setSelected(target)
 }
 
 export function updateQuery(next: string) {
