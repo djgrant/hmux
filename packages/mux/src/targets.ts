@@ -8,6 +8,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import type { DisplayTarget } from "./backend"
 
 const DIR = process.env.MUX_STATE_DIR ?? join(homedir(), ".humans", "mux-targets")
 
@@ -16,9 +17,9 @@ export const HOLD_SESSION = "_mux-target"
 
 const fileFor = (tty: string) => join(DIR, tty.replace(/[^a-zA-Z0-9]+/g, "-"))
 
-export function registerTarget(tty: string): void {
+export function registerTarget(tty: string, program: string | null): void {
   mkdirSync(DIR, { recursive: true })
-  writeFileSync(fileFor(tty), tty)
+  writeFileSync(fileFor(tty), JSON.stringify({ tty, program }))
 }
 
 export function unregisterTarget(tty: string): void {
@@ -27,9 +28,18 @@ export function unregisterTarget(tty: string): void {
   } catch {}
 }
 
-export function registeredTargets(): string[] {
+export function registeredTargets(): DisplayTarget[] {
   try {
-    return readdirSync(DIR).map((f) => readFileSync(join(DIR, f), "utf8").trim())
+    return readdirSync(DIR).flatMap((f) => {
+      const raw = readFileSync(join(DIR, f), "utf8").trim()
+      try {
+        const parsed = JSON.parse(raw)
+        return parsed?.tty ? [{ tty: parsed.tty, program: parsed.program ?? null }] : []
+      } catch {
+        // Pre-JSON registry file: bare tty, program unknown.
+        return raw ? [{ tty: raw, program: null }] : []
+      }
+    })
   } catch {
     return []
   }

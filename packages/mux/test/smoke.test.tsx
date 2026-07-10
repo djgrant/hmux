@@ -2,18 +2,18 @@ import { test, expect } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { App } from "../src/App"
 import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzyScore } from "../src/store"
-import type { Backend } from "../src/backend"
+import type { Backend, DisplayTarget } from "../src/backend"
 
 const opened: string[] = []
 const openedInClient: Array<[string, string]> = []
-let liveTargets: string[] = []
+let liveTargets: DisplayTarget[] = []
 const killed: string[] = []
 const fakeBackend: Backend = {
   list: async () => [],
   open: async (t) => void opened.push(t),
   opensInPlace: () => true,
   targets: async () => liveTargets,
-  openInClient: async (t, c) => void openedInClient.push([t, c]),
+  openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
   create: async () => {},
   rename: async () => {},
   kill: async (s) => void killed.push(s),
@@ -87,7 +87,7 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
 
   // With a display target registered, open routes there instead and the
   // picker stays up.
-  liveTargets = ["/dev/ttys009"]
+  liveTargets = [{ tty: "/dev/ttys009", program: "iTerm.app" }]
   setup.mockInput.pressEnter()
   await settle()
   expect(openedInClient).toEqual([["api:1", "/dev/ttys009"]])

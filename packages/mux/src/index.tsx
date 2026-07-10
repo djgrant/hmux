@@ -32,13 +32,41 @@ if (arg === "target") {
     console.error("mux target: cannot determine this terminal's tty.")
     process.exit(1)
   }
+  // One target at a time: routing is "the target", not "a target", so a
+  // second registration must either evict the first or back off.
+  const existing = (await backend.targets()).filter((t) => t.tty !== tty)
+  if (existing.length > 0) {
+    process.stdout.write(
+      `mux target: ${existing[0].tty} is already the target. [k]ill it and take over, or [a]bort? `,
+    )
+    const answer = await new Promise<string>((resolve) => {
+      process.stdin.setRawMode?.(true)
+      process.stdin.resume()
+      process.stdin.once("data", (d) => {
+        process.stdin.setRawMode?.(false)
+        process.stdin.pause()
+        resolve(d.toString())
+      })
+    })
+    process.stdout.write("\n")
+    if (answer.toLowerCase() !== "k") {
+      console.error("mux target: aborted — existing target kept.")
+      process.exit(1)
+    }
+    // Detaching the old client ends its `mux target` process (its attach
+    // returns), which unregisters it in its own finally.
+    for (const t of existing) {
+      Bun.spawnSync(["tmux", "detach-client", "-t", t.tty])
+      unregisterTarget(t.tty)
+    }
+  }
   // The hold session gives this client somewhere to sit until the picker
   // sends a real session over. Recreated on demand; hidden from the picker.
   Bun.spawnSync([
     "tmux", "new-session", "-d", "-s", HOLD_SESSION,
     "printf '\\n  mux target — pick a session in mux to load it here\\n'; exec cat",
   ])
-  registerTarget(tty)
+  registerTarget(tty, process.env.TERM_PROGRAM ?? null)
   try {
     const proc = Bun.spawn(["tmux", "attach", "-t", HOLD_SESSION], {
       stdin: "inherit",

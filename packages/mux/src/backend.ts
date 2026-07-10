@@ -33,6 +33,13 @@ export interface SessionGroup {
   detail: string | null
 }
 
+/** A terminal parked by `mux target`, identified by its tty. */
+export interface DisplayTarget {
+  tty: string
+  /** TERM_PROGRAM captured at registration (e.g. "iTerm.app", "ghostty"); used to focus it. */
+  program: string | null
+}
+
 export interface Backend {
   list(): Promise<SessionGroup[]>
   /** Bring the target to this terminal. Blocks until the user comes back. */
@@ -43,9 +50,9 @@ export interface Backend {
    * Live display targets: terminals that ran `mux target` and are still
    * connected. When one exists, open routes there and the picker stays up.
    */
-  targets(): Promise<string[]>
-  /** Load target into the given display client (from targets()). */
-  openInClient(target: string, client: string): Promise<void>
+  targets(): Promise<DisplayTarget[]>
+  /** Load target into the given display client (from targets()) and focus it. */
+  openInClient(target: string, client: DisplayTarget): Promise<void>
   create(name: string): Promise<void>
   rename(session: string, to: string): Promise<void>
   kill(session: string): Promise<void>

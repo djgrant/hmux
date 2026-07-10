@@ -4,7 +4,8 @@
  * state via tmux user options (@humans_status / @humans_detail, README) and
  * this module reads them back and rolls them up pane → window → session.
  */
-import { topStatus, type Backend, type SessionGroup, type WindowEntry } from "./backend"
+import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
+import { focusTarget } from "./focus"
 import { HOLD_SESSION, registeredTargets } from "./targets"
 
 const SEP = "\x1f" // unit separator: can't appear in names/paths
@@ -146,21 +147,22 @@ export class TmuxBackend implements Backend {
     await proc.exited
   }
 
-  async targets(): Promise<string[]> {
+  async targets(): Promise<DisplayTarget[]> {
     const registered = registeredTargets()
     if (registered.length === 0) return []
     try {
       const out = await tmux(["list-clients", "-F", "#{client_tty}"])
       const live = new Set(out.split("\n").filter(Boolean))
-      return registered.filter((tty) => live.has(tty))
+      return registered.filter((t) => live.has(t.tty))
     } catch {
       return []
     }
   }
 
-  async openInClient(target: string, client: string): Promise<void> {
+  async openInClient(target: string, client: DisplayTarget): Promise<void> {
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
-    await tmux(["switch-client", "-c", client, "-t", target.split(":")[0]])
+    await tmux(["switch-client", "-c", client.tty, "-t", target.split(":")[0]])
+    focusTarget(client)
   }
 
   async create(name: string): Promise<void> {
