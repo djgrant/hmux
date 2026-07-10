@@ -50,15 +50,36 @@ tell application "Ghostty"
   end repeat
 end tell`
 
-/** Apps we can select an exact tab in; anything else falls back to activate. */
+// Terminal.app reflects the OSC title into `custom title of tab`.
+const terminalAppSelectByName = (marker: string) => `
+tell application "Terminal"
+  repeat with w in windows
+    repeat with t in tabs of w
+      if custom title of t contains "${marker}" then
+        set selected of t to true
+        set index of w to 1
+        set frontmost of w to true
+      end if
+    end repeat
+  end repeat
+  activate
+end tell`
+
+/**
+ * Apps we can select an exact tab in; anything else falls back to activate.
+ * Same stamp, per-app "find tab by name" verb. Others would slot in here:
+ * kitty via `kitten @ focus-window --match title:<marker>` (its remote
+ * control instead of AppleScript), WezTerm via `wezterm cli activate-pane`,
+ * Linux via wmctrl/xdotool title match.
+ */
 const STRATEGIES: Record<string, (marker: string) => string> = {
   "iTerm.app": iTermSelectByName,
   ghostty: ghosttyFocusByName,
+  Apple_Terminal: terminalAppSelectByName,
 }
 
 /** Apps with no tab-selection API: bring the app forward, best we can do. */
 const APP_NAMES: Record<string, string> = {
-  Apple_Terminal: "Terminal",
   WezTerm: "WezTerm",
   vscode: "Visual Studio Code",
 }
