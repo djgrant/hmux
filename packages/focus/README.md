@@ -16,8 +16,6 @@ Or from anything that can run a shell:
 humans-focus /dev/ttys012 iTerm.app
 ```
 
-The arguments are read in the terminal that will be focused: the `tty` command prints the tty, and the `TERM_PROGRAM` environment variable names the program.
-
 ## How it works
 
 No macOS API focuses "the tab attached to this tty". Asking apps for their ttys is unreliable too: pty-nesting wrappers (kiro, `script`, anything that re-terms a shell) give the inner process a different tty from the one the terminal app knows about.
