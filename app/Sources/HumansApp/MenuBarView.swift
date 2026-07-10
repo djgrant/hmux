@@ -39,6 +39,22 @@ struct MenuBarView: View {
             }
             .toggleStyle(.checkbox)
 
+            if !state.notificationsAuthorized {
+                Button {
+                    if state.notificationsDenied {
+                        state.openNotificationSettings()
+                    } else {
+                        state.requestNotificationAuthorization()
+                    }
+                } label: {
+                    Label(state.notificationsDenied
+                            ? "Notifications denied — open Settings"
+                            : "Enable notifications…",
+                          systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Divider()
 
             Button("Preferences…") { openPrefs() }

@@ -17,6 +17,19 @@ const run = <A, E>(effect: Effect.Effect<A, E, Hub | Store>) => runtime.runPromi
 
 const mcpHandler = makeMcpHandler(run)
 
+// When supervised (the Mac app spawns us with our stdin tied to a pipe it
+// holds), exit when that pipe closes. If the app dies without a clean stop —
+// force quit, crash, kill — an orphaned server would keep the port bound and
+// the next app launch would crash-loop against it.
+if (process.env.HUMANS_SUPERVISED === "1") {
+  void (async () => {
+    for await (const _ of Bun.stdin.stream()) {
+      // discard; we only care about EOF
+    }
+    process.exit(0)
+  })()
+}
+
 const WS_TOPIC = "events"
 const port = Number(process.env.HUMANS_PORT ?? DEFAULT_PORT)
 

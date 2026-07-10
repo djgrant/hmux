@@ -84,7 +84,14 @@ final class ServerProcess: @unchecked Sendable {
         p.currentDirectoryURL = URL(fileURLWithPath: "\(repoPath)/packages/server")
         var env = ProcessInfo.processInfo.environment
         env["HUMANS_PORT"] = String(port)
+        env["HUMANS_SUPERVISED"] = "1"
         p.environment = env
+
+        // Lifetime tether: the server watches this pipe's stdin for EOF and
+        // exits when it closes — which happens automatically if this app dies
+        // for any reason, clean or not. Prevents orphaned servers holding the
+        // port against the next launch.
+        p.standardInput = Pipe()
 
         let startedAt = Date()
         p.terminationHandler = { [weak self] proc in

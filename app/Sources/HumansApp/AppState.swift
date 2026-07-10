@@ -17,6 +17,11 @@ final class AppState: ObservableObject {
     @Published var connected = false
     @Published var sessions: [Session] = []
     @Published var notificationsAuthorized = false
+    @Published var notificationsDenied = false
+
+    // The port the supervised server was actually started with, so a port
+    // change in Settings can restart it in place.
+    private var runningPort: Int?
 
     var needsAttentionCount: Int {
         sessions.filter { $0.status == .needsAttention }.count
@@ -58,10 +63,12 @@ final class AppState: ObservableObject {
 
     func startServer() {
         guard !settings.repoPath.isEmpty else { return }
+        runningPort = settings.port
         server.start(repoPath: settings.repoPath, port: settings.port)
     }
 
     func stopServer() {
+        runningPort = nil
         server.stop()
     }
 
@@ -75,13 +82,39 @@ final class AppState: ObservableObject {
         guard !settings.muted else { return }
         if settings.onlyWhenTuiUnfocused && tuiIsFocused() { return }
         if settings.quietHours && inQuietHours() { return }
-        notifications.post(for: message, sound: settings.notificationSound)
+        let sound = settings.notificationSound
+        // UNUserNotificationCenter drops posts silently when authorization was
+        // never requested (e.g. the Grant step was skipped in onboarding), so
+        // resolve authorization before posting rather than assuming it.
+        notifications.authorizationStatus { [weak self] status in
+            Task { @MainActor in
+                guard let self else { return }
+                switch status {
+                case .notDetermined:
+                    self.notifications.requestAuthorization { granted in
+                        Task { @MainActor in
+                            self.notificationsAuthorized = granted
+                            self.notificationsDenied = !granted
+                            if granted { self.notifications.post(for: message, sound: sound) }
+                        }
+                    }
+                case .denied:
+                    self.notificationsAuthorized = false
+                    self.notificationsDenied = true
+                default:
+                    self.notificationsAuthorized = true
+                    self.notificationsDenied = false
+                    self.notifications.post(for: message, sound: sound)
+                }
+            }
+        }
     }
 
     func refreshNotificationAuth() {
         notifications.authorizationStatus { [weak self] status in
             Task { @MainActor in
                 self?.notificationsAuthorized = (status == .authorized || status == .provisional)
+                self?.notificationsDenied = (status == .denied)
             }
         }
     }
@@ -138,6 +171,19 @@ final class AppState: ObservableObject {
 
     func onSettingsChanged() {
         connection.updateURL(settings.wsURL)
+        // A port change must move the supervised server too, or the status dot
+        // goes yellow forever while the old server sits on the old port.
+        if serverRunning, let current = runningPort, current != settings.port {
+            stopServer()
+            startServer()
+        }
+    }
+
+    // Deep-link to the app's pane in System Settings › Notifications, for when
+    // authorization was denied and only the user can flip it back on.
+    func openNotificationSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!
+        NSWorkspace.shared.open(url)
     }
 
     func chooseRepoPath() {

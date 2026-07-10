@@ -9,6 +9,11 @@ struct OnboardingView: View {
     @ObservedObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
 
+    // The app can't observe that the user actually ran the copied commands, so
+    // copying is the best available signal for these two steps' checkmarks.
+    @State private var pluginCopied = false
+    @State private var mcpCopied = false
+
     init(state: AppState) {
         self.state = state
         self.settings = state.settings
@@ -36,23 +41,25 @@ struct OnboardingView: View {
 
             step(icon: "puzzlepiece.extension", title: "Claude Code plugin",
                  detail: "claude --plugin-dir …/packages/cc-plugin",
-                 done: false) {
+                 done: pluginCopied) {
                 Button("Copy") {
                     let cmd = settings.repoPath.isEmpty
                         ? "claude --plugin-dir <repo>/packages/cc-plugin"
                         : "claude --plugin-dir \(settings.repoPath)/packages/cc-plugin"
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(cmd, forType: .string)
+                    pluginCopied = true
                 }
             }
 
             step(icon: "terminal", title: "MCP endpoint",
                  detail: settings.mcpEndpoint,
-                 done: false) {
+                 done: mcpCopied) {
                 Button {
                     state.copyMcpRegisterCommand()
+                    mcpCopied = true
                 } label: {
-                    Label("copy", systemImage: "doc.on.doc")
+                    Label("Copy", systemImage: "doc.on.doc")
                 }
             }
 
