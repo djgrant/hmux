@@ -17,9 +17,43 @@ if (!process.stdout.isTTY) {
 const backend = new TmuxBackend()
 setBackend(backend)
 
+const arg = process.argv[2]
+
+// `mux target`: park this terminal as a display target. The picker (running
+// anywhere else) routes opens into this terminal and stays on screen itself.
+if (arg === "target") {
+  if (process.env.TMUX) {
+    console.error("mux target: run this in a terminal that is not already inside tmux.")
+    process.exit(1)
+  }
+  const { registerTarget, unregisterTarget, HOLD_SESSION } = await import("./targets")
+  const tty = Bun.spawnSync(["tty"], { stdin: "inherit" }).stdout.toString().trim()
+  if (!tty || tty === "not a tty") {
+    console.error("mux target: cannot determine this terminal's tty.")
+    process.exit(1)
+  }
+  // The hold session gives this client somewhere to sit until the picker
+  // sends a real session over. Recreated on demand; hidden from the picker.
+  Bun.spawnSync([
+    "tmux", "new-session", "-d", "-s", HOLD_SESSION,
+    "printf '\\n  mux target — pick a session in mux to load it here\\n'; exec cat",
+  ])
+  registerTarget(tty)
+  try {
+    const proc = Bun.spawn(["tmux", "attach", "-t", HOLD_SESSION], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    await proc.exited
+  } finally {
+    unregisterTarget(tty)
+  }
+  process.exit(0)
+}
+
 // `mux <name>` jumps straight into the best-matching session; the router
 // appears when the user detaches (prefix d).
-const arg = process.argv[2]
 if (arg) {
   const groups = await backend.list()
   const best = groups

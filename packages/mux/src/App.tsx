@@ -40,6 +40,13 @@ export function App(props: {
   })
 
   const open = async (target: string) => {
+    // A live display target (another terminal running `mux target`) takes
+    // priority: load the session there, the picker stays on screen.
+    const targets = await props.backend.targets()
+    if (targets.length > 0) {
+      await props.backend.openInClient(target, targets[0])
+      return
+    }
     if (props.backend.opensInPlace()) {
       await props.backend.open(target)
       return

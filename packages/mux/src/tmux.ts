@@ -5,6 +5,7 @@
  * this module reads them back and rolls them up pane → window → session.
  */
 import { topStatus, type Backend, type SessionGroup, type WindowEntry } from "./backend"
+import { HOLD_SESSION, registeredTargets } from "./targets"
 
 const SEP = "\x1f" // unit separator: can't appear in names/paths
 
@@ -31,7 +32,6 @@ interface PaneRow {
   windowName: string
   paneActive: boolean
   currentPath: string
-  command: string
   agent: string | null
   status: string | null
   detail: string | null
@@ -56,11 +56,11 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{pane_current_command}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, paneActive, currentPath, command, agent, status, detail] =
+        const [session, windowIndex, windowName, paneActive, currentPath, agent, status, detail] =
           line.split(SEP)
         const rows = panesBySession.get(session) ?? []
         rows.push({
@@ -69,7 +69,6 @@ export class TmuxBackend implements Backend {
           windowName: sanitize(windowName),
           paneActive: paneActive === "1",
           currentPath,
-          command: sanitize(command),
           agent: agent ? sanitize(agent) : null,
           status: status ? sanitize(status) : null,
           detail: detail ? sanitize(detail) : null,
@@ -82,6 +81,7 @@ export class TmuxBackend implements Backend {
     for (const line of sessionsOut.split("\n")) {
       if (!line) continue
       const [name, dir, attached] = line.split(SEP)
+      if (name === HOLD_SESSION) continue // mux's own plumbing, not a session
       const panes = panesBySession.get(name) ?? []
 
       // Group panes into windows, preserving tmux's window order.
@@ -103,7 +103,6 @@ export class TmuxBackend implements Backend {
           name: active.windowName,
           dir: tilde(active.currentPath),
           agent,
-          command: active.command || null,
           paneCount: wPanes.length,
           ...topStatus(wPanes),
         })
@@ -145,6 +144,23 @@ export class TmuxBackend implements Backend {
       stderr: "inherit",
     })
     await proc.exited
+  }
+
+  async targets(): Promise<string[]> {
+    const registered = registeredTargets()
+    if (registered.length === 0) return []
+    try {
+      const out = await tmux(["list-clients", "-F", "#{client_tty}"])
+      const live = new Set(out.split("\n").filter(Boolean))
+      return registered.filter((tty) => live.has(tty))
+    } catch {
+      return []
+    }
+  }
+
+  async openInClient(target: string, client: string): Promise<void> {
+    if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
+    await tmux(["switch-client", "-c", client, "-t", target.split(":")[0]])
   }
 
   async create(name: string): Promise<void> {

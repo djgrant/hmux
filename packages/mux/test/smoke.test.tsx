@@ -5,11 +5,15 @@ import { setGroups, selected, setSelected, updateQuery, rows, selectedRow, fuzzy
 import type { Backend } from "../src/backend"
 
 const opened: string[] = []
+const openedInClient: Array<[string, string]> = []
+let liveTargets: string[] = []
 const killed: string[] = []
 const fakeBackend: Backend = {
   list: async () => [],
   open: async (t) => void opened.push(t),
   opensInPlace: () => true,
+  targets: async () => liveTargets,
+  openInClient: async (t, c) => void openedInClient.push([t, c]),
   create: async () => {},
   rename: async () => {},
   kill: async (s) => void killed.push(s),
@@ -25,8 +29,8 @@ function seed() {
       status: "waiting",
       detail: "approve the plan?",
       windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", command: "claude", paneCount: 2, status: "waiting", detail: "approve the plan?" },
-        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, command: "bun", paneCount: 1, status: "busy", detail: null },
+        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", paneCount: 2, status: "waiting", detail: "approve the plan?" },
+        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, paneCount: 1, status: "busy", detail: null },
       ],
     },
     {
@@ -36,7 +40,7 @@ function seed() {
       attached: false,
       status: null,
       detail: null,
-      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, command: "zsh", paneCount: 1, status: null, detail: null }],
+      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, paneCount: 1, status: null, detail: null }],
     },
   ])
   updateQuery("")
@@ -80,6 +84,15 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   setup.mockInput.pressEnter()
   await settle()
   expect(opened).toEqual(["api:1"])
+
+  // With a display target registered, open routes there instead and the
+  // picker stays up.
+  liveTargets = ["/dev/ttys009"]
+  setup.mockInput.pressEnter()
+  await settle()
+  expect(openedInClient).toEqual([["api:1", "/dev/ttys009"]])
+  expect(opened).toEqual(["api:1"]) // unchanged
+  liveTargets = []
 
   // Escape clears the query; tree view restores.
   setup.mockInput.pressEscape()

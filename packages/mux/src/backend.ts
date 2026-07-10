@@ -16,8 +16,6 @@ export interface WindowEntry {
   dir: string
   /** Advertised agent identity (e.g. "api-3f2c · sonnet") when a cc session runs here. */
   agent: string | null
-  /** What's running in the window's active pane (e.g. "claude", "vim"). */
-  command: string | null
   paneCount: number
   /** Advertised state rolled up from the window's panes. */
   status: Status | null
@@ -41,6 +39,13 @@ export interface Backend {
   open(target: string): Promise<void>
   /** True when open() retargets in place (no renderer suspend needed). */
   opensInPlace(): boolean
+  /**
+   * Live display targets: terminals that ran `mux target` and are still
+   * connected. When one exists, open routes there and the picker stays up.
+   */
+  targets(): Promise<string[]>
+  /** Load target into the given display client (from targets()). */
+  openInClient(target: string, client: string): Promise<void>
   create(name: string): Promise<void>
   rename(session: string, to: string): Promise<void>
   kill(session: string): Promise<void>

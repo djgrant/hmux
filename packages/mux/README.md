@@ -16,6 +16,10 @@ and opens sessions in place in whatever terminal you use.
   plugins. **`prefix d` (detach) returns to mux.** That's the only tmux you
   need to know.
 - `mux <name>` jumps straight into the best-matching session.
+- `mux target` parks a terminal as a **display target**: with one open,
+  picking a session in mux loads it into that terminal and the picker stays
+  on screen — mux becomes a window manager across your terminal windows
+  (they can even be different apps: one iTerm, one Ghostty).
 
 Sessions with multiple windows show them as an indented tree; a window's pane
 splits are preserved exactly as laid out. While typing, matches flatten into

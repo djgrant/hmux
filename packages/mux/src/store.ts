@@ -47,14 +47,9 @@ function sessionRow(g: SessionGroup): Row {
   }
 }
 
-/** "api-3f2c · sonnet · claude · 3 panes" — whichever parts exist. */
+/** "api-3f2c · sonnet · 3 panes" — whichever parts exist. */
 function windowMeta(w: WindowEntry): string | null {
-  const parts = [
-    w.agent,
-    // The window name usually already IS the command; don't repeat it.
-    w.command && w.command !== w.name ? w.command : null,
-    w.paneCount > 1 ? `${w.paneCount} panes` : null,
-  ].filter(Boolean)
+  const parts = [w.agent, w.paneCount > 1 ? `${w.paneCount} panes` : null].filter(Boolean)
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
@@ -99,7 +94,7 @@ export const rows = createMemo<Row[]>(() => {
   const scored: Array<{ row: Row; score: number }> = []
   for (const g of groups()) {
     for (const w of g.windows) {
-      const score = fuzzyScore(`${g.name} ${w.name} ${w.agent ?? ""} ${w.command ?? ""}`, q)
+      const score = fuzzyScore(`${g.name} ${w.name} ${w.agent ?? ""}`, q)
       if (score >= 0) scored.push({ row: windowRow(w, g), score })
     }
   }
