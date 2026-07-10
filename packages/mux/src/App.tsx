@@ -58,6 +58,15 @@ export function App(props: {
     refresh()
   }
 
+  // Peek: load the selection into the display target without taking focus.
+  // Disabled for control-mode targets — every switch there tears down and
+  // rebuilds native windows, far too much churn to ride the arrow keys.
+  const peek = async (target: string) => {
+    const [t] = await props.backend.targets()
+    if (!t || t.controlMode) return
+    await props.backend.peekInClient(target, t)
+  }
+
   useKeyboard((key) => {
     const m = mode()
     if (m.kind === "confirm-kill") {
@@ -80,10 +89,15 @@ export function App(props: {
     }
 
     const row = selectedRow()
-    if (key.name === "up") {
-      moveSelection(-1)
-    } else if (key.name === "down") {
-      moveSelection(1)
+    if (key.name === "up" || key.name === "down") {
+      moveSelection(key.name === "up" ? -1 : 1)
+      // Held option turns browsing into peeking: the display target follows
+      // the selection while focus stays here. (Not ctrl: macOS reserves
+      // ctrl+arrows for Mission Control, the terminal never sees them.)
+      if (key.option || key.meta || key.ctrl) {
+        const next = selectedRow()
+        if (next) peek(next.target)
+      }
     } else if (key.name === "return" && row) {
       key.preventDefault()
       open(row.target)
@@ -118,12 +132,11 @@ export function App(props: {
 
   return (
     <box flexDirection="column" height="100%" backgroundColor={MAIN_BG} paddingTop={1} paddingLeft={2} paddingRight={2}>
-      {/* Header: title + typeahead query */}
-      <box flexDirection="row">
-        <text fg={DIM}>mux</text>
-        <Show when={query().length > 0}>
-          <text fg={BRIGHT}>{"   / " + query()}</text>
-        </Show>
+      {/* Typeahead query, framed so it reads as an input */}
+      <box border borderColor={GUTTER} flexShrink={0} paddingLeft={1} paddingRight={1}>
+        <text wrapMode="none" truncate fg={query().length > 0 ? BRIGHT : FAINT}>
+          {query() || "filter"}
+        </text>
       </box>
       <box height={1} />
 
@@ -160,7 +173,6 @@ export function App(props: {
                     <Show when={row.meta}>
                       <span style={{ fg: isSelected() ? BODY : DIM }}>{"  " + row.meta}</span>
                     </Show>
-                    <span style={{ fg: isSelected() ? DIM : FAINT }}>{"  " + row.dir}</span>
                     <Show when={row.detail}>
                       <span style={{ fg: statusColor(row.status) }}>{"  " + row.detail}</span>
                     </Show>
@@ -175,7 +187,7 @@ export function App(props: {
       {/* Footer */}
       <box flexShrink={0}>
         <text wrapMode="none" truncate fg={FAINT}>
-          type to filter · ⏎ open · ^n new · ^r rename · ^x kill · ^c quit — inside a session, prefix d returns here
+          ⏎ open · ⌥↑↓ peek · ^n new · ^r rename · ^x kill
         </text>
       </box>
 

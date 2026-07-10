@@ -59,6 +59,8 @@ export interface Backend {
   targets(): Promise<DisplayTarget[]>
   /** Load target into the given display client (from targets()) and focus it. */
   openInClient(target: string, client: DisplayTarget): Promise<void>
+  /** Load target into the display client without taking focus (peek). */
+  peekInClient(target: string, client: DisplayTarget): Promise<void>
   create(name: string): Promise<void>
   rename(session: string, to: string): Promise<void>
   kill(session: string): Promise<void>

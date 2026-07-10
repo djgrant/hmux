@@ -11,7 +11,12 @@ inside them** — which agent is waiting on you, which is busy, which errored �
 and opens sessions in place in whatever terminal you use.
 
 - Type to filter (fuzzy, across sessions and windows). `⏎` opens the top match.
-- `↑↓` select · `⏎` open · `^n` new session · `^r` rename · `^x` kill · `^c` quit
+- `↑↓` select · `⏎` open · `⌥↑`/`⌥↓` peek · `^n` new session · `^r` rename ·
+  `^x` kill · `^c` quit
+- Peek (hold option while arrowing) loads each selection into the display
+  target as you pass it, without moving focus off the picker. Needs a
+  display target; disabled for `--cc` targets, where every switch rebuilds
+  native windows.
 - Inside a session you're in plain tmux — your server, your config, your
   plugins. **`prefix d` (detach) returns to mux.** That's the only tmux you
   need to know.

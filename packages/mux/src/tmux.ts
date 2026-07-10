@@ -196,15 +196,18 @@ export class TmuxBackend implements Backend {
     }
   }
 
-  async openInClient(target: string, client: DisplayTarget): Promise<void> {
+  async peekInClient(target: string, client: DisplayTarget): Promise<void> {
     if (target.includes(":")) await tmux(["select-window", "-t", target]).catch(() => {})
     await tmux(["switch-client", "-c", client.tty, "-t", target.split(":")[0]])
+  }
+
+  async openInClient(target: string, client: DisplayTarget): Promise<void> {
+    await this.peekInClient(target, client)
     // focusTerminal stamps titles through the tty — fatal to a control-mode
     // client, whose tty is the iTerm %-protocol channel. Jiggle-repaint the
     // alt-screen panes, give the redraw 300ms to land, then activate.
     if (client.controlMode) {
       await this.repaintSession(target.split(":")[0]).catch(() => {})
-      await Bun.sleep(300)
       if (process.platform === "darwin" && client.program === "iTerm.app")
         Bun.spawn(["osascript", "-e", 'tell application "iTerm2" to activate'], {
           stdout: "ignore",

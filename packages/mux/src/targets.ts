@@ -19,7 +19,19 @@ const fileFor = (tty: string) => join(DIR, tty.replace(/[^a-zA-Z0-9]+/g, "-"))
 
 export function registerTarget(tty: string, program: string | null): void {
   mkdirSync(DIR, { recursive: true })
-  writeFileSync(fileFor(tty), JSON.stringify({ tty, program }))
+  // pid proves ownership: a hard-killed target (closed window, SIGHUP) skips
+  // its unregister, and the freed tty gets recycled — without the pid check
+  // a stale file would claim whatever tmux client lands on that tty next.
+  writeFileSync(fileFor(tty), JSON.stringify({ tty, program, pid: process.pid }))
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function unregisterTarget(tty: string): void {
@@ -32,13 +44,19 @@ export function registeredTargets(): DisplayTarget[] {
   try {
     return readdirSync(DIR).flatMap((f) => {
       const raw = readFileSync(join(DIR, f), "utf8").trim()
+      let parsed: { tty?: string; program?: string; pid?: number } | null = null
       try {
-        const parsed = JSON.parse(raw)
-        return parsed?.tty ? [{ tty: parsed.tty, program: parsed.program ?? null }] : []
+        parsed = JSON.parse(raw)
       } catch {
-        // Pre-JSON registry file: bare tty, program unknown.
-        return raw ? [{ tty: raw, program: null }] : []
+        // Pre-pid registry file: bare tty. No owner to verify — reap it.
       }
+      if (!parsed?.tty || !parsed.pid || !pidAlive(parsed.pid)) {
+        try {
+          rmSync(join(DIR, f), { force: true })
+        } catch {}
+        return []
+      }
+      return [{ tty: parsed.tty, program: parsed.program ?? null }]
     })
   } catch {
     return []

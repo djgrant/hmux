@@ -19,11 +19,6 @@ export interface FocusTarget {
   program: string | null
 }
 
-// The stamp delay does double duty: lets the terminal ingest the new title,
-// and lets whatever just redrew the terminal (e.g. tmux switch-client)
-// finish painting so the tab doesn't come forward mid-paint.
-const SETTLE_MS = 350
-
 // iTerm may suffix the title (e.g. "… (tmux)"), so match by containment.
 const iTermSelectByName = (marker: string) => `
 tell application "iTerm2"
@@ -41,14 +36,18 @@ tell application "iTerm2"
   activate
 end tell`
 
+// Iterate every terminal, not `focused terminal of t`: the target may be an
+// unfocused split in a tab (checking only the focused one can never find it).
 const ghosttyFocusByName = (marker: string) => `
 tell application "Ghostty"
   repeat with w in windows
     repeat with t in tabs of w
-      set trm to focused terminal of t
-      if name of trm contains "${marker}" then focus trm
+      repeat with trm in terminals of t
+        if name of trm contains "${marker}" then focus trm
+      end repeat
     end repeat
   end repeat
+  activate
 end tell`
 
 // Terminal.app reflects the OSC title into `custom title of tab`.
@@ -98,7 +97,6 @@ async function stampAndFocus(tty: string, script: (marker: string) => string): P
   } catch {
     return
   }
-  await Bun.sleep(SETTLE_MS)
   await osascript(script(marker))
   try {
     writeFileSync(tty, "\x1b]0;\x07") // back to the terminal's automatic title

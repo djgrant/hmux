@@ -6,6 +6,7 @@ import type { Backend, DisplayTarget } from "../src/backend"
 
 const opened: string[] = []
 const openedInClient: Array<[string, string]> = []
+const peeked: Array<[string, string]> = []
 let liveTargets: DisplayTarget[] = []
 const killed: string[] = []
 const fakeBackend: Backend = {
@@ -14,6 +15,7 @@ const fakeBackend: Backend = {
   opensInPlace: () => true,
   targets: async () => liveTargets,
   openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
+  peekInClient: async (t, c) => void peeked.push([t, c.tty]),
   create: async () => {},
   rename: async () => {},
   kill: async (s) => void killed.push(s),
@@ -65,8 +67,7 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   // Tree view: api (2 windows → header + 2 rows), web single-window collapses.
   expect(rows().map((r) => r.target)).toEqual(["api", "api:1", "api:2", "web"])
   expect(frame).toContain("approve the plan?")
-  expect(frame).toContain("~/Repos/api")
-  expect(frame).toContain("prefix d returns here")
+  expect(frame).toContain("⌥↑↓ peek")
   // Window meta: advertised agent identity + pane count; single-window
   // sessions carry their window meta up to the collapsed header row.
   expect(frame).toContain("api-3f2c · sonnet")
@@ -75,8 +76,6 @@ test("two-tier rows, typeahead flattening, open and kill", async () => {
   // Typeahead flattens to ranked windows: "cl" matches api's claude window.
   setup.mockInput.typeText("cl")
   await settle()
-  frame = setup.captureCharFrame()
-  expect(frame).toContain("/ cl")
   expect(rows()[0]?.target).toBe("api:1")
   expect(rows().every((r) => r.kind === "window")).toBe(true)
 
