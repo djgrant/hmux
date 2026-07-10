@@ -86,21 +86,43 @@ export interface McpIdentity {
 
 const buildServer = (run: Runner, identity: McpIdentity = {}) => {
   /**
-   * Resolve the effective default identity for one tool call. The session
-   * header is authoritative when it resolves (registration is the source of
-   * truth for names) and doubles as a liveness touch.
+   * Resolve the effective identity for one tool call. A registered session —
+   * via the harness-stamped sessionId arg or the x-humans-session header — is
+   * AUTHORITATIVE: its agent/project override anything the model wrote in the
+   * tool args, so an agent cannot impersonate another by lying in params.
+   * Resolving also doubles as a liveness touch. Without a registered session,
+   * args win over headers over the random fallback (the un-hooked MCP path).
    */
-  const resolveIdentity = async (): Promise<{ agent?: string; project?: string }> => {
-    if (identity.session !== undefined) {
-      const session = await run(
-        Effect.flatMap(Hub, (hub) => hub.touchSession(identity.session!))
-      )
+  const resolveIdentity = async (
+    sessionId: string | undefined
+  ): Promise<{ agent?: string; project?: string; trusted: boolean }> => {
+    const sid = sessionId ?? identity.session
+    if (sid !== undefined) {
+      const session = await run(Effect.flatMap(Hub, (hub) => hub.touchSession(sid)))
       if (session) {
-        return { agent: session.agent, project: session.project ?? identity.project }
+        return { agent: session.agent, project: session.project, trusted: true }
       }
     }
-    return { agent: identity.agent, project: identity.project }
+    return { agent: identity.agent, project: identity.project, trusted: false }
   }
+
+  const sessionIdSchema = z
+    .string()
+    .optional()
+    .describe(
+      "Your humans.sh session id (the Claude Code plugin stamps this automatically; " +
+        "leave unset otherwise)"
+    )
+
+  /** Apply the trust precedence: registered session > model args > headers. */
+  const effectiveIdentity = (
+    resolved: { agent?: string; project?: string; trusted: boolean },
+    agent: string | undefined,
+    project: string | undefined
+  ) => ({
+    agent: resolved.trusted ? resolved.agent : (agent ?? resolved.agent),
+    project: resolved.trusted ? (resolved.project ?? project) : (project ?? resolved.project)
+  })
 
   // `logging` capability is required for the notifications/message keep-alives
   // that hold the HTTP stream open for token-less clients during a blocked ask.
@@ -134,13 +156,14 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
         project: z
           .string()
           .optional()
-          .describe("The project you are working in (e.g. its directory)")
+          .describe("The project you are working in (e.g. its directory)"),
+        sessionId: sessionIdSchema
       }
     },
-    async ({ question, context, suggestion, agent, project }, extra) => {
-      const header = await resolveIdentity()
-      const effectiveAgent = agent ?? header.agent
-      const effectiveProject = project ?? header.project
+    async ({ question, context, suggestion, agent, project, sessionId }, extra) => {
+      const resolved = await resolveIdentity(sessionId)
+      const { agent: effectiveAgent, project: effectiveProject } =
+        effectiveIdentity(resolved, agent, project)
       const message: Message = {
         id: crypto.randomUUID(),
         kind: "ask",
@@ -187,15 +210,16 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
         project: z
           .string()
           .optional()
-          .describe("The project you are working in (e.g. its directory)")
+          .describe("The project you are working in (e.g. its directory)"),
+        sessionId: sessionIdSchema
       }
     },
-    async ({ tool_name, input, tool_use_id: _toolUseId, agent, project }, extra) => {
+    async ({ tool_name, input, tool_use_id: _toolUseId, agent, project, sessionId }, extra) => {
       // Claude Code calls this tool itself with only tool_name/input/
       // tool_use_id — identity comes from the request headers (humans-run).
-      const header = await resolveIdentity()
-      const effectiveAgent = agent ?? header.agent
-      const effectiveProject = project ?? header.project
+      const resolved = await resolveIdentity(sessionId)
+      const { agent: effectiveAgent, project: effectiveProject } =
+        effectiveIdentity(resolved, agent, project)
       // Human-readable body: what the agent wants to run, input as a fence.
       const message: Message = {
         id: crypto.randomUUID(),
@@ -246,16 +270,18 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
         project: z
           .string()
           .optional()
-          .describe("The project you are working in (e.g. its directory)")
+          .describe("The project you are working in (e.g. its directory)"),
+        sessionId: sessionIdSchema
       }
     },
-    async ({ message, agent, project }) => {
-      const header = await resolveIdentity()
-      const effectiveProject = project ?? header.project
+    async ({ message, agent, project, sessionId }) => {
+      const resolved = await resolveIdentity(sessionId)
+      const { agent: effectiveAgent, project: effectiveProject } =
+        effectiveIdentity(resolved, agent, project)
       const record: Message = {
         id: crypto.randomUUID(),
         kind: "notify",
-        agent: agent ?? header.agent ?? randomId("agent"),
+        agent: effectiveAgent ?? randomId("agent"),
         ...(effectiveProject !== undefined ? { project: effectiveProject } : {}),
         body: message,
         status: "pending",

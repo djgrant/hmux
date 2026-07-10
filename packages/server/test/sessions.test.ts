@@ -280,9 +280,33 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
   expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit")
   expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__ask")
   expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__notify")
-  // The context carries the ROSTER identity so ask/notify messages correlate.
-  expect(output.hookSpecificOutput.additionalContext).toContain('agent: "my-project-hook"')
-  expect(output.hookSpecificOutput.additionalContext).toContain(`project: "${cwd}"`)
+
+  // PreToolUse on a humans tool: the harness session id is stamped into the
+  // tool input, overriding a model-supplied (spoofed) sessionId.
+  const preTool = await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "PreToolUse",
+    tool_name: "mcp__humans__notify",
+    tool_input: { message: "hi", sessionId: "spoofed-session" }
+  })
+  expect(preTool.exitCode).toBe(0)
+  const stamped = JSON.parse(preTool.stdout) as {
+    hookSpecificOutput: { hookEventName: string; updatedInput: Record<string, unknown> }
+  }
+  expect(stamped.hookSpecificOutput.hookEventName).toBe("PreToolUse")
+  expect(stamped.hookSpecificOutput.updatedInput.sessionId).toBe(id)
+  expect(stamped.hookSpecificOutput.updatedInput.message).toBe("hi")
+
+  // PreToolUse on any other tool: silent.
+  const preOther = await runHook({
+    session_id: id,
+    cwd,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "ls" }
+  })
+  expect(preOther.stdout).toBe("")
 
   // PostToolUse while bound: UserPromptSubmit already injected the context
   // into this conversation (marker file), so no duplicate.
@@ -308,7 +332,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
   expect(reOut.hookSpecificOutput.hookEventName).toBe("PostToolUse")
-  expect(reOut.hookSpecificOutput.additionalContext).toContain('agent: "my-project-hook"')
+  expect(reOut.hookSpecificOutput.additionalContext).toContain("mcp__humans__ask")
   const postAgain = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
   expect(postAgain.stdout).toBe("")
 

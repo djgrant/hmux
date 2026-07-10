@@ -2,7 +2,10 @@
  * humans.sh Claude Code hook. One script for all six events, dispatched on
  * hook_event_name from the stdin JSON:
  *
- *   SessionStart     -> POST /sessions/register   (project = cwd, agent = dirname-<id prefix>)
+ *   SessionStart     -> POST /sessions/register   (project = cwd, agent = dirname/branch-<id prefix>)
+ *   PreToolUse       -> mcp__humans__* calls only: stamp the harness-provided
+ *                       session id into the tool input (updatedInput), making
+ *                       message attribution harness-asserted, not model-asserted
  *   UserPromptSubmit -> POST /sessions/:id/status {status: "working"}
  *                       + GET /sessions/:id; if bound, emit additionalContext
  *   PostToolUse      -> POST /sessions/:id/status {status: "working"}   (heartbeat)
@@ -65,6 +68,9 @@ interface HookInput {
   model?: unknown
   /** Notification events: the notification text. */
   message?: unknown
+  /** PreToolUse events: the tool being called and its input. */
+  tool_name?: unknown
+  tool_input?: unknown
 }
 
 interface SessionInfo {
@@ -87,6 +93,20 @@ const post = (path: string, body?: unknown) =>
       : {})
   })
 
+// Current git branch of cwd, or undefined outside a repo / on any failure.
+const gitBranch = (cwd: string): string | undefined => {
+  try {
+    const proc = Bun.spawnSync(["git", "-C", cwd, "branch", "--show-current"], {
+      stdout: "pipe",
+      stderr: "ignore"
+    })
+    const branch = proc.stdout.toString().trim()
+    return proc.exitCode === 0 && branch.length > 0 ? branch : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const modelName = (model: unknown): string | undefined => {
   if (typeof model === "string") return model
   if (typeof model === "object" && model !== null) {
@@ -97,24 +117,13 @@ const modelName = (model: unknown): string | undefined => {
   return undefined
 }
 
-// The injected context carries the session's ROSTER identity so the agent's
-// ask/notify messages correlate with its roster entry in the inbox (instead
-// of arriving under a self-declared name like "claude").
-const boundContext = (session: SessionInfo): string => {
-  const identity =
-    typeof session.agent === "string" && session.agent.length > 0
-      ? ` On every mcp__humans__ask and mcp__humans__notify call pass agent: "${session.agent}"` +
-        (typeof session.project === "string" && session.project.length > 0
-          ? ` and project: "${session.project}"`
-          : "") +
-        " so your messages correlate with your roster entry."
-      : ""
-  return (
-    "This session is bound to a human inbox via humans.sh. When you need a decision, " +
-    "clarification, or approval, ask the human with the mcp__humans__ask tool instead of " +
-    `guessing. Send progress updates and completions with mcp__humans__notify.${identity}`
-  )
-}
+// Identity is handled by the PreToolUse stamp (the harness-provided session
+// id is written into every humans tool call), so the injected context only
+// needs to teach the workflow — no self-declared names to keep honest.
+const boundContext = (_session: SessionInfo): string =>
+  "This session is bound to a human inbox via humans.sh. When you need a decision, " +
+  "clarification, or approval, ask the human with the mcp__humans__ask tool instead of " +
+  "guessing. Send progress updates and completions with mcp__humans__notify."
 
 /** GET the session, or undefined on any failure (server down, 404, bad JSON). */
 const getSessionInfo = async (encoded: string): Promise<SessionInfo | undefined> => {
@@ -142,16 +151,41 @@ const main = async () => {
     case "SessionStart": {
       const cwd = typeof input.cwd === "string" ? input.cwd : undefined
       const dirname = cwd?.split("/").filter(Boolean).pop()
+      const branch = cwd !== undefined ? gitBranch(cwd) : undefined
+      const name =
+        dirname !== undefined
+          ? `${dirname}${branch !== undefined ? `/${branch}` : ""}-${id.slice(0, 4)}`
+          : undefined
       const model = modelName(input.model)
       // Fresh conversation: whatever context an earlier run injected is gone,
       // so clear the marker and let the next bound check re-inject.
       clearMarker(id)
       await post("/sessions/register", {
         id,
-        ...(dirname !== undefined ? { agent: `${dirname}-${id.slice(0, 4)}` } : {}),
+        ...(name !== undefined ? { agent: name } : {}),
         ...(cwd !== undefined ? { project: cwd } : {}),
         ...(model !== undefined ? { model } : {})
       })
+      return
+    }
+    case "PreToolUse": {
+      // Identity stamp: write THIS session's harness-provided id into every
+      // humans tool call, overriding whatever the model put there. The server
+      // treats a registered sessionId as authoritative for agent/project, so
+      // an agent cannot impersonate another by lying in tool params.
+      if (typeof input.tool_name !== "string" || !input.tool_name.startsWith("mcp__humans__")) {
+        return
+      }
+      const toolInput =
+        typeof input.tool_input === "object" && input.tool_input !== null ? input.tool_input : {}
+      console.log(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            updatedInput: { ...toolInput, sessionId: id }
+          }
+        })
+      )
       return
     }
     case "UserPromptSubmit": {
