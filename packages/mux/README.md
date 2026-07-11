@@ -23,10 +23,9 @@ and opens sessions in place in whatever terminal you use.
 - After a reboot, `mux` is the whole boot story: every entrypoint starts by
   making the substrate ready (`Backend.ensure()`), so a dead server is
   birthed and — when tmux-resurrect is installed — the last snapshot is
-  restored before the picker appears. No launchd, no boot scripts; because
-  the server is born from the terminal you ran mux in, it inherits that
-  terminal's macOS permission grants. An empty snapshot leaves an empty
-  picker (`^n` creates the first session).
+  restored before the picker appears. The server is born from the terminal
+  you ran mux in and inherits its macOS permission grants. An empty snapshot
+  leaves an empty picker (`^n` creates the first session).
 - `mux <name>` jumps straight into the best-matching session.
 - `mux target` parks a terminal as a **display target**: with one open,
   picking a session in mux loads it into that terminal and the picker stays
