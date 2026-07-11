@@ -49,6 +49,16 @@ export interface DisplayTarget {
 }
 
 export interface Backend {
+  /**
+   * Make the substrate ready before the first list(): called synchronously at
+   * every mux entrypoint. For tmux this is where a dead server after a reboot
+   * comes back — birthed and restored from the last snapshot when one exists.
+   * Runs in the user's own terminal, so the server it births inherits that
+   * terminal's identity (macOS TCC grants ride along). A no-op when the
+   * backend is already live; on a genuinely fresh machine it leaves nothing
+   * behind and the picker opens empty (^n creates the first session).
+   */
+  ensure(): Promise<void>
   list(): Promise<SessionGroup[]>
   /** Bring the target to this terminal. Blocks until the user comes back. */
   open(target: string): Promise<void>

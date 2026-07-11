@@ -63,9 +63,51 @@ export async function insideTmux(): Promise<boolean> {
   return false
 }
 
+/**
+ * Scratch session that hosts the resurrect restore; killed (or left as the
+ * server's death warrant) before ensure() returns, filtered from list()
+ * defensively in case a crash strands one.
+ */
+const BOOT_SESSION = "__mux_boot"
+
+/** tpm's default and XDG plugin homes; null when resurrect isn't installed. */
+function resurrectRestoreScript(): string | null {
+  const home = process.env.HOME ?? ""
+  for (const base of [`${home}/.tmux/plugins`, `${home}/.config/tmux/plugins`]) {
+    const script = `${base}/tmux-resurrect/scripts/restore.sh`
+    if (Bun.file(script).size > 0) return script
+  }
+  return null
+}
+
 export class TmuxBackend implements Backend {
   /** Pass the result of insideTmux(); the env var alone is not trusted. */
   constructor(private inTmux = false) {}
+
+  async ensure(): Promise<void> {
+    const alive = await tmux(["list-sessions"]).then(() => true, () => false)
+    if (alive) return
+    const restore = resurrectRestoreScript()
+    if (!restore) return // nothing to restore from; create() births the server later
+
+    console.error("mux: no tmux server — restoring last snapshot…")
+    // Resurrect needs a live server to add sessions into, and derives its
+    // socket from $TMUX (empty here — we're a client-less process), so birth
+    // a scratch session and point $TMUX at the real socket ourselves.
+    await tmux(["new-session", "-d", "-s", BOOT_SESSION])
+    const socket = (await tmux(["display-message", "-p", "#{socket_path}"]).catch(() => "")).trim()
+    if (socket) {
+      const proc = Bun.spawn([restore], {
+        env: { ...process.env, TMUX: `${socket},,` },
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      await proc.exited
+    }
+    // Drop the scratch session. If the snapshot was empty this kills the
+    // server too — the picker opens empty rather than inventing a session.
+    await tmux(["kill-session", "-t", BOOT_SESSION]).catch(() => {})
+  }
 
   async list(): Promise<SessionGroup[]> {
     let sessionsOut: string
@@ -111,7 +153,7 @@ export class TmuxBackend implements Backend {
     for (const line of sessionsOut.split("\n")) {
       if (!line) continue
       const [name, dir, attached] = line.split(SEP)
-      if (name === HOLD_SESSION) continue // mux's own plumbing, not a session
+      if (name === HOLD_SESSION || name === BOOT_SESSION) continue // mux's own plumbing, not a session
       const panes = panesBySession.get(name) ?? []
 
       // Group panes into windows, preserving tmux's window order.

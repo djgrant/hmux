@@ -18,6 +18,10 @@ const inTmux = await insideTmux()
 const backend = new TmuxBackend(inTmux)
 setBackend(backend)
 
+// Every entrypoint (mux, mux <name>, mux target) starts from a ready
+// substrate: after a reboot this is where sessions come back.
+await backend.ensure()
+
 const arg = process.argv[2]
 
 // `mux target`: park this terminal as a display target. The picker (running

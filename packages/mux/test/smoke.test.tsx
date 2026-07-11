@@ -12,6 +12,7 @@ const killed: string[] = []
 const created: string[] = []
 const renamed: Array<[string, string]> = []
 const fakeBackend: Backend = {
+  ensure: async () => {},
   list: async () => [],
   open: async (t) => void opened.push(t),
   opensInPlace: () => true,
