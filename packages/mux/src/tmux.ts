@@ -91,7 +91,7 @@ function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
 const RESUME_MANIFEST = `${process.env.HOME}/.local/share/mux/resume.json`
 
 /** How often the snapshot is refreshed, machine-wide (see save()). */
-export const SAVE_INTERVAL_MS = 60_000
+const SAVE_INTERVAL_MS = 60_000
 
 /** Shells it is safe to type a resume command into. */
 const SHELLS = new Set(["zsh", "bash", "fish", "sh"])
@@ -116,6 +116,11 @@ export class TmuxBackend implements Backend {
   constructor(private inTmux = false) {}
 
   async ensure(): Promise<void> {
+    // Persistence rides along with readiness: every long-lived mux process
+    // (picker or parked target) refreshes the snapshot; the mtime guard in
+    // save() collapses them to one save per interval machine-wide.
+    if (resurrectScript("save.sh"))
+      setInterval(() => void this.save().catch(() => {}), SAVE_INTERVAL_MS)
     const alive = await tmux(["list-sessions"]).then(() => true, () => false)
     if (alive) return
     const restore = resurrectScript("restore.sh")
@@ -132,7 +137,7 @@ export class TmuxBackend implements Backend {
     await this.replayResumes().catch(() => {})
   }
 
-  async save(): Promise<void> {
+  private async save(): Promise<void> {
     const script = resurrectScript("save.sh")
     if (!script) return
     // Every mux process runs its own save timer, so the last write acts as

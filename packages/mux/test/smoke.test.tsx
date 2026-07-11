@@ -13,7 +13,6 @@ const created: string[] = []
 const renamed: Array<[string, string]> = []
 const fakeBackend: Backend = {
   ensure: async () => {},
-  save: async () => {},
   list: async () => [],
   open: async (t) => void opened.push(t),
   opensInPlace: () => true,

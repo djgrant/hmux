@@ -57,15 +57,12 @@ export interface Backend {
    * terminal's identity (macOS TCC grants ride along). A no-op when the
    * backend is already live; on a genuinely fresh machine it leaves nothing
    * behind and the picker opens empty (^n creates the first session).
+   *
+   * Ongoing persistence is the backend's own affair: a backend with a
+   * persistence mechanism keeps its snapshot fresh for as long as the
+   * process lives, so restore always has something recent to replay.
    */
   ensure(): Promise<void>
-  /**
-   * Persist a snapshot of the current sessions when the backend has a
-   * persistence mechanism installed; a no-op otherwise. Called periodically
-   * while any mux process runs (picker or parked target), so restore always
-   * has something recent to replay.
-   */
-  save(): Promise<void>
   list(): Promise<SessionGroup[]>
   /** Bring the target to this terminal. Blocks until the user comes back. */
   open(target: string): Promise<void>
