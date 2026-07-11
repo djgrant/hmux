@@ -153,14 +153,15 @@ export function App(props: {
     } else if (key.ctrl && key.name === "n") {
       setMode({
         kind: "prompt",
-        label: "new session name",
+        label: "new session — name, or session/window",
         initial: "",
-        // Creating a session drops you straight into it: birth it, then open
-        // it like any row — the picker selects it and loads it.
+        // Creating drops you straight in: birth it, then open the target it
+        // reports (a session, or a window when the name carried a slash) like
+        // any row — the picker selects it and loads it.
         onSubmit: async (text) => {
-          await props.backend.create(text)
+          const target = await props.backend.create(text)
           await refresh()
-          await open(text)
+          await open(target)
         },
       })
     } else if (key.ctrl && key.name === "r" && row) {

@@ -77,7 +77,12 @@ export interface Backend {
   openInClient(target: string, client: DisplayTarget): Promise<void>
   /** Load target into the display client without taking focus (peek). */
   peekInClient(target: string, client: DisplayTarget): Promise<void>
-  create(name: string): Promise<void>
+  /**
+   * Create a session, or — when the name carries a slash ("session/window") —
+   * a window inside that session, birthing the session first if it's new.
+   * Returns the target of whatever was made, ready to hand to open().
+   */
+  create(name: string): Promise<string>
   /**
    * Remember the picker's cursor across restarts. Server-scoped by nature: the
    * saved target is a pointer into the live sessions, so it lives and dies with

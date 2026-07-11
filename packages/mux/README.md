@@ -13,6 +13,9 @@ and opens sessions in place in whatever terminal you use.
 - Type to filter (fuzzy, across sessions and windows). `⏎` opens the top match.
 - `↑↓` select · `⏎` open · `⌥↑`/`⌥↓` peek · `^n` new session · `^r` rename (session or window) ·
   `^x` kill · `^c` quit
+- `^n` names a session; a name with a slash (`ideas/plato-webdav`) makes a
+  window inside that session, creating the session if it's new. Either way you
+  land in what you just made, and the cursor is remembered for next time.
 - Peek (hold option while arrowing) loads each selection into the display
   target as you pass it, without moving focus off the picker. Needs a
   display target; disabled for `--cc` targets, where every switch rebuilds

@@ -20,7 +20,7 @@ const fakeBackend: Backend = {
   targets: async () => liveTargets,
   openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
   peekInClient: async (t, c) => void peeked.push([t, c.tty]),
-  create: async (n) => void created.push(n),
+  create: async (n) => (created.push(n), n),
   rename: async (t, to) => void renamed.push([t, to]),
   kill: async (s) => void killed.push(s),
   saveSelection: async (t) => void saved.push(t),
@@ -137,7 +137,7 @@ test("prompt overlay: ^n creates, ^r renames", async () => {
   await settle()
   setup.mockInput.pressKey("n", { ctrl: true })
   await settle()
-  expect(setup.captureCharFrame()).toContain("new session name")
+  expect(setup.captureCharFrame()).toContain("new session")
   setup.mockInput.typeText("foo")
   await settle()
   setup.mockInput.pressEnter()

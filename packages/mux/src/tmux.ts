@@ -390,8 +390,29 @@ export class TmuxBackend implements Backend {
     }
   }
 
-  async create(name: string): Promise<void> {
-    await tmux(["new-session", "-d", "-s", name, "-c", process.env.HOME ?? "/"])
+  async create(name: string): Promise<string> {
+    const dir = process.env.HOME ?? "/"
+    const slash = name.indexOf("/")
+    // No slash: a plain session, its header its own target.
+    if (slash < 0) {
+      await tmux(["new-session", "-d", "-s", name, "-c", dir])
+      return name
+    }
+    // "session/window": a window under the named session. If the session is
+    // new it's born holding this window, and — being single-windowed — it
+    // collapses to a session header, so the header is the target.
+    const session = name.slice(0, slash)
+    const window = name.slice(slash + 1)
+    const exists = await tmux(["has-session", "-t", `=${session}`]).then(() => true, () => false)
+    if (!exists) {
+      await tmux(["new-session", "-d", "-s", session, "-n", window, "-c", dir])
+      return session
+    }
+    // Existing session: add the window and land on it by index.
+    const index = (
+      await tmux(["new-window", "-t", `=${session}:`, "-n", window, "-c", dir, "-P", "-F", "#{window_index}"])
+    ).trim()
+    return `${session}:${index}`
   }
 
   async rename(target: string, to: string): Promise<void> {
