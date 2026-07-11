@@ -5,6 +5,7 @@
  * `mux advertise`) and this module reads them back and rolls them up
  * pane → window → session.
  */
+import { statSync } from "node:fs"
 import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
 import { focusTerminal } from "@humans/focus"
 import { HOLD_SESSION, registeredTargets } from "./targets"
@@ -89,6 +90,9 @@ function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
  */
 const RESUME_MANIFEST = `${process.env.HOME}/.local/share/mux/resume.json`
 
+/** How often the snapshot is refreshed, machine-wide (see save()). */
+export const SAVE_INTERVAL_MS = 60_000
+
 /** Shells it is safe to type a resume command into. */
 const SHELLS = new Set(["zsh", "bash", "fish", "sh"])
 
@@ -131,6 +135,13 @@ export class TmuxBackend implements Backend {
   async save(): Promise<void> {
     const script = resurrectScript("save.sh")
     if (!script) return
+    // Every mux process runs its own save timer, so the last write acts as
+    // the shared clock: skip when a recent save exists and N processes
+    // collapse to roughly one save per interval machine-wide.
+    try {
+      const age = Date.now() - statSync(RESUME_MANIFEST).mtimeMs
+      if (age < SAVE_INTERVAL_MS - 5_000) return
+    } catch {} // no manifest yet — save
     // Only real sessions are worth snapshotting: saving while just mux's own
     // plumbing exists would overwrite the last good snapshot with an empty one.
     const out = await tmux(["list-sessions", "-F", "#{session_name}"]).catch(() => "")

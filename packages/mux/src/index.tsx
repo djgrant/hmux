@@ -1,7 +1,7 @@
 import { render } from "@opentui/solid"
 import { App } from "./App"
 import { MAIN_BG } from "./theme"
-import { TmuxBackend, insideTmux } from "./tmux"
+import { TmuxBackend, insideTmux, SAVE_INTERVAL_MS } from "./tmux"
 import { fuzzyScore, setBackend } from "./store"
 
 // Full-screen TUI sizes itself from STDOUT; refuse to render clamped into a
@@ -24,7 +24,7 @@ await backend.ensure()
 
 // Keep the snapshot fresh while any mux process runs — picker, jumped-into
 // session, or parked target — so restore always has something recent.
-setInterval(() => void backend.save().catch(() => {}), 60_000)
+setInterval(() => void backend.save().catch(() => {}), SAVE_INTERVAL_MS)
 
 const arg = process.argv[2]
 
