@@ -123,7 +123,13 @@ export function App(props: {
         kind: "prompt",
         label: "new session name",
         initial: "",
-        onSubmit: (text) => props.backend.create(text).then(refresh),
+        // Creating a session drops you straight into it: birth it, then open
+        // it like any row — the picker selects it and loads it.
+        onSubmit: async (text) => {
+          await props.backend.create(text)
+          await refresh()
+          await open(text)
+        },
       })
     } else if (key.ctrl && key.name === "r" && row) {
       // Renames the row under the cursor: session rows rename the session,
