@@ -125,19 +125,21 @@ function needsYou(r: Row): boolean {
 }
 
 /**
- * Left/right jump between sessions that want you — the nearest one up
- * (-1) or down (+1), wrapping. In the tree we land on session headers only
- * (their status is rolled up from the windows); while filtering, every row is
- * a window, so we consider them all.
+ * Left/right jump between the rows that want you — the nearest one up (-1) or
+ * down (+1), wrapping. We land on the leaves: individual windows, plus the
+ * single-window sessions that are their own window. An expanded session header
+ * only mirrors its children's rolled-up status, so we skip it and visit those
+ * windows directly — a session with several needy windows stays fully
+ * reachable. While filtering, every row is already a window.
  */
 export function jumpToNeedsYou(direction: 1 | -1) {
   const rs = rows()
   if (rs.length === 0) return
-  const inTree = query().trim().length === 0
   const hits: number[] = []
   for (let i = 0; i < rs.length; i++) {
-    if (inTree && rs[i].kind !== "session") continue
-    if (needsYou(rs[i])) hits.push(i)
+    const r = rs[i]
+    if (r.kind === "session" && r.expanded) continue
+    if (needsYou(r)) hits.push(i)
   }
   if (hits.length === 0) return
   parked = false

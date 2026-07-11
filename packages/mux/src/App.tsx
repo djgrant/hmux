@@ -137,9 +137,16 @@ export function App(props: {
         if (next) peek(next.target)
       }
     } else if (key.name === "left" || key.name === "right") {
-      // Skip to the nearest session that isn't working — one up on left, one
-      // down on right — so a full board can be cleared without hunting.
+      // Skip to the nearest window that wants you — one up on left, one down
+      // on right — so a full board can be cleared without hunting.
       jumpToNeedsYou(key.name === "left" ? -1 : 1)
+    } else if (key.meta && (key.name === "b" || key.name === "f")) {
+      // ⌥←/⌥→ do the same jump but peek as they go, the display following the
+      // selection while focus stays here (as with ⌥↑↓). iTerm's Esc+ option
+      // sends these as meta-b/meta-f (emacs word motion), not modified arrows.
+      jumpToNeedsYou(key.name === "b" ? -1 : 1)
+      const next = selectedRow()
+      if (next) peek(next.target)
     } else if (key.name === "return" && row) {
       key.preventDefault()
       open(row.target)
