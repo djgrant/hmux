@@ -42,6 +42,32 @@ export function App(props: {
     onCleanup(stop)
   })
 
+  // A display target that registers while the picker is up loads the current
+  // selection on its own: run `mux target` in a fresh terminal and the session
+  // under the cursor lands there, no keypress. Targets already parked when the
+  // picker opened form the baseline — only ones that appear afterwards trigger.
+  onMount(() => {
+    if (props.poll === false) return
+    let known: Set<string> | null = null
+    const tick = async () => {
+      const targets = await props.backend.targets()
+      const ttys = new Set(targets.map((t) => t.tty))
+      if (known === null) {
+        known = ttys
+        return
+      }
+      const row = selectedRow()
+      if (row) {
+        for (const t of targets) {
+          if (!known.has(t.tty)) await props.backend.openInClient(row.target, t).catch(() => {})
+        }
+      }
+      known = ttys
+    }
+    const timer = setInterval(tick, 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
   const open = async (target: string) => {
     // Entering a session clears the typeahead but leaves the cursor on the
     // session just opened, so the picker lands back where you were.
