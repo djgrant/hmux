@@ -220,6 +220,10 @@ export function App(props: {
                 row.kind === "window" && query().length > 0
                   ? `${row.session} · ${row.label}`
                   : row.label
+              // An expanded session header hands its signal — glyph and detail
+              // both — down to the windows that own it, so it isn't doubled.
+              const signal = () => (row.expanded ? null : row.status)
+              const detail = () => (row.expanded ? null : row.detail)
               return (
                 <box
                   flexDirection="row"
@@ -232,12 +236,12 @@ export function App(props: {
                   }}
                 >
                   <text wrapMode="none" truncate fg={isSelected() ? BRIGHT : row.kind === "session" ? BODY : DIM}>
-                    <span style={{ fg: statusColor(row.status) }}>
-                      {indent() + statusGlyph(row.status, row.attached) + " "}
+                    <span style={{ fg: statusColor(signal()) }}>
+                      {indent() + statusGlyph(signal(), row.attached) + " "}
                     </span>
                     {label()}
-                    <Show when={row.detail}>
-                      <span style={{ fg: statusColor(row.status) }}>{"  " + row.detail}</span>
+                    <Show when={detail()}>
+                      <span style={{ fg: statusColor(signal()) }}>{"  " + detail()}</span>
                     </Show>
                   </text>
                 </box>

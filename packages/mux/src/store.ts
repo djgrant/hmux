@@ -26,6 +26,12 @@ export interface Row {
   detail: string | null
   attached: boolean
   session: string
+  /**
+   * A session header whose windows are listed beneath it. Its status still
+   * rolls up (navigation lands here), but the glyph is left to the children —
+   * showing it on both parent and window would double every signal.
+   */
+  expanded?: boolean
 }
 
 function sessionRow(g: SessionGroup): Row {
@@ -73,9 +79,11 @@ export const rows = createMemo<Row[]>(() => {
   if (q.length === 0) {
     const out: Row[] = []
     for (const g of groups()) {
-      out.push(sessionRow(g))
-      // A single-window session IS its window; don't repeat it.
-      if (g.windows.length > 1) for (const w of g.windows) out.push(windowRow(w, g))
+      // A single-window session IS its window; don't repeat it. A multi-window
+      // one expands, and its header defers the status glyph to the children.
+      const expanded = g.windows.length > 1
+      out.push({ ...sessionRow(g), expanded })
+      if (expanded) for (const w of g.windows) out.push(windowRow(w, g))
     }
     return out
   }
