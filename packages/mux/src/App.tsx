@@ -8,6 +8,7 @@ import {
   moveSelection,
   query,
   refresh,
+  restoreSelection,
   rows,
   selected,
   selectedRow,
@@ -38,6 +39,9 @@ export function App(props: {
 
   onMount(() => {
     if (props.poll === false) return
+    // Hand the last cursor to the store before the first poll lands, so the
+    // picker opens where you left it rather than at the top.
+    props.backend.loadSelection().then(restoreSelection)
     const stop = startPolling(1000)
     onCleanup(stop)
   })
@@ -72,6 +76,8 @@ export function App(props: {
     // Entering a session clears the typeahead but leaves the cursor on the
     // session just opened, so the picker lands back where you were.
     selectTarget(target)
+    props.backend.saveSelection(target) // outlive this picker: reopen here
+
     // A live display target (another terminal running `mux target`) takes
     // priority: load the session there, the picker stays on screen.
     const targets = await props.backend.targets()
@@ -171,8 +177,14 @@ export function App(props: {
       // session rows the whole session (mirrors ^r rename's target routing).
       setMode({ kind: "confirm-kill", target: row.target, label: row.label, isWindow: row.kind === "window" })
     } else if (key.ctrl && key.name === "c") {
-      renderer.destroy()
-      process.exit(0)
+      // Persist the browsed cursor, then quit — reopening lands here.
+      const target = selectedRow()?.target
+      const quit = () => {
+        renderer.destroy()
+        process.exit(0)
+      }
+      if (target) props.backend.saveSelection(target).then(quit, quit)
+      else quit()
     } else if (!key.ctrl && !key.meta && key.sequence && /^[\x20-\x7e]$/.test(key.sequence)) {
       // Typeahead: any printable character filters.
       updateQuery(query() + key.sequence)

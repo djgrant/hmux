@@ -72,6 +72,9 @@ export async function insideTmux(): Promise<boolean> {
  */
 const BOOT_SESSION = "__mux_boot"
 
+/** Global user option the picker parks its last cursor in. */
+const SELECTION_OPT = "@mux-selection"
+
 /** tpm's default and XDG plugin homes; null when resurrect isn't installed. */
 function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
   const home = process.env.HOME ?? ""
@@ -399,5 +402,15 @@ export class TmuxBackend implements Backend {
   async kill(target: string): Promise<void> {
     const verb = target.includes(":") ? "kill-window" : "kill-session"
     await tmux([verb, "-t", target])
+  }
+
+  // The cursor rides a global user option: set with the server, gone with it.
+  async saveSelection(target: string): Promise<void> {
+    await tmux(["set-option", "-gq", SELECTION_OPT, target]).catch(() => {})
+  }
+
+  async loadSelection(): Promise<string | null> {
+    const value = await tmux(["show-options", "-gqv", SELECTION_OPT]).catch(() => "")
+    return value.trim() || null
   }
 }

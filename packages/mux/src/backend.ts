@@ -78,6 +78,13 @@ export interface Backend {
   /** Load target into the display client without taking focus (peek). */
   peekInClient(target: string, client: DisplayTarget): Promise<void>
   create(name: string): Promise<void>
+  /**
+   * Remember the picker's cursor across restarts. Server-scoped by nature: the
+   * saved target is a pointer into the live sessions, so it lives and dies with
+   * the substrate that holds them — no separate lifetime to reconcile.
+   */
+  saveSelection(target: string): Promise<void>
+  loadSelection(): Promise<string | null>
   /** Rename a session ("name") or a window ("name:index"). */
   rename(target: string, to: string): Promise<void>
   /** Kill a session ("name") or a single window ("name:index"). */

@@ -10,6 +10,7 @@ const peeked: Array<[string, string]> = []
 let liveTargets: DisplayTarget[] = []
 const killed: string[] = []
 const created: string[] = []
+const saved: string[] = []
 const renamed: Array<[string, string]> = []
 const fakeBackend: Backend = {
   ensure: async () => {},
@@ -22,6 +23,8 @@ const fakeBackend: Backend = {
   create: async (n) => void created.push(n),
   rename: async (t, to) => void renamed.push([t, to]),
   kill: async (s) => void killed.push(s),
+  saveSelection: async (t) => void saved.push(t),
+  loadSelection: async () => null,
 }
 
 function seed() {

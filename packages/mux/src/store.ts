@@ -175,6 +175,16 @@ export function setBackend(b: Backend) {
   backend = b
 }
 
+/**
+ * A cursor to restore on the next populated refresh — the picker's last
+ * position, read back from the backend at startup. Applied once, then dropped;
+ * the live tree takes over from there.
+ */
+let restoreTarget: string | null = null
+export function restoreSelection(target: string | null) {
+  restoreTarget = target
+}
+
 export async function refresh() {
   if (!backend) return
   const gen = ++generation
@@ -182,6 +192,20 @@ export async function refresh() {
   if (gen !== generation) return // a newer poll superseded this one
   setGroups(list)
   if (selected() >= rows().length) setSelected(Math.max(0, rows().length - 1))
+  // Restore wins the first tick it can land — memory over the live follow, and
+  // only once. Later ticks fall through to following the attached window.
+  if (restoreTarget && parked && query().length === 0) {
+    const target = restoreTarget
+    restoreTarget = null
+    const reset = rows()
+    const session = reset.find((r) => r.target === target)?.session ?? target
+    let i = reset.findIndex((r) => r.target === target)
+    if (i < 0) i = reset.findIndex((r) => r.session === session)
+    if (i >= 0) {
+      setSelected(i)
+      return
+    }
+  }
   followActiveWindow()
 }
 
