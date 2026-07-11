@@ -1,8 +1,9 @@
 /**
  * The tmux backend: the user's own default tmux server, untouched config.
  * mux never interprets what runs inside a pane — panes advertise their own
- * state via tmux user options (@humans_status / @humans_detail, README) and
- * this module reads them back and rolls them up pane → window → session.
+ * state via tmux user options (@mux_status / @mux_detail, written by
+ * `mux advertise`) and this module reads them back and rolls them up
+ * pane → window → session.
  */
 import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
 import { focusTerminal } from "@humans/focus"
@@ -81,6 +82,17 @@ function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
 }
 
 /**
+ * Panes advertise a resume command (@mux_resume via `mux advertise`) that
+ * brings their occupant back after a restore. Pane options die with the
+ * server, so save() copies them into this manifest and ensure() replays
+ * them once resurrect has rebuilt the panes.
+ */
+const RESUME_MANIFEST = `${process.env.HOME}/.local/share/mux/resume.json`
+
+/** Shells it is safe to type a resume command into. */
+const SHELLS = new Set(["zsh", "bash", "fish", "sh"])
+
+/**
  * Resurrect's scripts derive their socket from $TMUX, which is empty in a
  * client-less process like mux — point it at the real socket explicitly.
  */
@@ -113,6 +125,7 @@ export class TmuxBackend implements Backend {
     // Drop the scratch session. If the snapshot was empty this kills the
     // server too — the picker opens empty rather than inventing a session.
     await tmux(["kill-session", "-t", BOOT_SESSION]).catch(() => {})
+    await this.replayResumes().catch(() => {})
   }
 
   async save(): Promise<void> {
@@ -124,6 +137,55 @@ export class TmuxBackend implements Backend {
     const real = out.split("\n").filter((s) => s && s !== HOLD_SESSION && s !== BOOT_SESSION)
     if (real.length === 0) return
     await runResurrect(script, ["quiet"])
+    await this.saveResumes().catch(() => {})
+  }
+
+  /** Copy advertised resume commands off the panes into the manifest. */
+  private async saveResumes(): Promise<void> {
+    const out = await tmux([
+      "list-panes", "-a", "-F",
+      `#{session_name}:#{window_index}.#{pane_index}${SEP}#{@mux_resume}`,
+    ])
+    const resumes: Record<string, string> = {}
+    for (const line of out.split("\n")) {
+      if (!line) continue
+      const [target, command] = line.split(SEP)
+      const session = target.split(":")[0]
+      if (session === HOLD_SESSION || session === BOOT_SESSION) continue
+      if (command) resumes[target] = command
+    }
+    await Bun.write(RESUME_MANIFEST, JSON.stringify(resumes, null, 2))
+  }
+
+  /**
+   * Type each manifest command into its restored pane. Resurrect brings
+   * panes back as bare shells at their old cwd under the same
+   * session:window.pane targets, so matching is by target — a session
+   * renamed between save and restore loses its resume. Panes running
+   * anything other than a bare shell are skipped, so a re-run cannot type
+   * into a session that already resumed.
+   */
+  private async replayResumes(): Promise<void> {
+    const manifest = await Bun.file(RESUME_MANIFEST)
+      .json()
+      .catch(() => null)
+    if (!manifest || typeof manifest !== "object") return
+    const out = await tmux([
+      "list-panes", "-a", "-F",
+      `#{session_name}:#{window_index}.#{pane_index}${SEP}#{pane_current_command}`,
+    ]).catch(() => "")
+    const shellPanes = new Set(
+      out
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split(SEP) as [string, string])
+        .filter(([, command]) => SHELLS.has(command))
+        .map(([target]) => target),
+    )
+    for (const [target, command] of Object.entries(manifest as Record<string, string>)) {
+      if (typeof command !== "string" || !shellPanes.has(target)) continue
+      await tmux(["send-keys", "-t", target, command, "Enter"]).catch(() => {})
+    }
   }
 
   async list(): Promise<SessionGroup[]> {
@@ -144,7 +206,7 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@humans_agent}${SEP}#{@humans_status}${SEP}#{@humans_detail}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@mux_agent}${SEP}#{@mux_status}${SEP}#{@mux_detail}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue

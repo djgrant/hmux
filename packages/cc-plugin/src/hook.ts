@@ -112,30 +112,34 @@ interface SessionInfo {
 }
 
 /**
- * Advertise into tmux pane user options (the mux advertise protocol) — the
- * hook runs inside the pane, so $TMUX_PANE identifies it exactly. This is a
- * second, server-independent signal plane: mux reads it straight off tmux.
+ * Advertise via `mux advertise` — mux's signal plane, independent of the
+ * humans server. The hook runs inside the pane, so mux knows exactly which
+ * pane is speaking; where the state is stored is mux's backend's business.
  * Status vocabulary is mux's ("who needs me"): error > message (the agent
  * left the human something; detail says what) > busy > idle. An unsignalled
- * finished turn is idle — only declared states claim attention. Failure-silent
- * like everything else.
+ * finished turn is idle — only declared states claim attention. A resume
+ * command, advertised at session start, lets mux relaunch this session when
+ * it restores after a reboot. Failure-silent like everything else, including
+ * when mux is not installed.
  */
-const advertise = (status: string | null, detail?: string, agent?: string | null) => {
-  const pane = process.env.TMUX_PANE
-  if (!pane) return
-  const set = (option: string, value: string | null | undefined) => {
-    try {
-      if (value === undefined) return
-      const args =
-        value === null
-          ? ["set-option", "-pu", "-t", pane, option]
-          : ["set-option", "-p", "-t", pane, option, value]
-      Bun.spawnSync(["tmux", ...args], { stdout: "ignore", stderr: "ignore" })
-    } catch {}
-  }
-  set("@humans_status", status)
-  set("@humans_detail", detail === undefined ? null : detail)
-  if (agent !== undefined) set("@humans_agent", agent)
+const advertise = (
+  status: string | null,
+  detail?: string,
+  agent?: string | null,
+  resume?: string,
+) => {
+  const args =
+    status === null
+      ? ["--clear"]
+      : [
+          ...["--status", status],
+          ...(detail !== undefined ? ["--detail", detail] : []),
+          ...(agent !== undefined && agent !== null ? ["--agent", agent] : []),
+          ...(resume !== undefined ? ["--resume", resume] : []),
+        ]
+  try {
+    Bun.spawnSync(["mux", "advertise", ...args], { stdout: "ignore", stderr: "ignore" })
+  } catch {}
 }
 
 const request = async (path: string, init?: RequestInit): Promise<Response> =>
@@ -226,7 +230,12 @@ const main = async () => {
       // busy. The exception is source=compact, which fires mid-turn while
       // the agent is actively working.
       const atRest = input.source !== "compact"
-      advertise(atRest ? "idle" : "busy", undefined, [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "))
+      advertise(
+        atRest ? "idle" : "busy",
+        undefined,
+        [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "),
+        `claude --resume ${id}`,
+      )
       await post("/sessions/register", {
         id,
         ...(name !== undefined ? { agent: name } : {}),

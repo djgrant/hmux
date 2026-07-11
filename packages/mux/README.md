@@ -50,36 +50,51 @@ one ranked list.
 
 mux is the protocol; tmux is the bundled backend (see `src/backend.ts` for
 the seam). mux never inspects what runs in a pane — processes advertise their
-own state by setting tmux **pane user options**, and mux rolls them up
-pane → window → session (priority: `error` > `message` > `busy` > `idle`).
+own state, and mux rolls it up pane → window → session (priority: `error` >
+`message` > `busy` > `idle`).
 
-From inside the pane in question:
+The write path is `mux advertise`, run from inside the pane in question:
 
 ```sh
 # I left the human something (detail says what):
-tmux set-option -p @humans_status message
-tmux set-option -p @humans_detail "approve the migration plan?"
+mux advertise --status message --detail "approve the migration plan?"
 
 # I'm working again:
-tmux set-option -p @humans_status busy
+mux advertise --status busy
 
 # Clear (back to unadvertised):
-tmux set-option -pu @humans_status
-tmux set-option -pu @humans_detail
+mux advertise --clear
 ```
 
-- `@humans_status` — one word: `message` (the agent needs or left the human
+- `--status` — one word: `message` (the agent needs or left the human
   something; blue ● with the detail as its label), `busy` (amber ●), `error`
   (red ✗), `idle` (an agent is present, at rest; blue ● with no label — plain
   panes advertise nothing and render dim). Freeform tolerated; unknown values
   render dim.
-- `@humans_detail` — optional one-line human-readable context. Control
-  characters are stripped at ingress.
-- `@humans_agent` — optional identity of the agent in the pane (e.g.
-  "api-3f2c · sonnet"). Ingested but not currently surfaced: the picker
+- `--detail` — optional one-line human-readable context. Cleared whenever
+  a status is set without one, so a stale annotation cannot outlive the
+  status it described. Control characters are stripped at ingress.
+- `--agent` — identity of the agent in the pane (e.g. "api-3f2c · sonnet").
+  Persists until changed. Ingested but not currently surfaced: the picker
   shows and searches only session and window names.
-- `-p` (pane-level) means the advertiser needs no knowledge of its session
-  name, and the state dies with the pane.
+- `--resume` — the command that brings the pane's occupant back after a
+  restore (see below). Persists until changed.
+
+Advertisers need no knowledge of their session name — mux identifies the
+calling pane itself — and the state dies with the pane. Where it is stored is
+the backend's business; the tmux backend uses pane user options (`@mux_status`
+and friends), which also work as a direct write path for anything that would
+rather speak tmux.
+
+### Resume
+
+A pane that advertises `--resume` gets its occupant back after a reboot.
+Snapshot saves copy the advertised resume commands into a manifest
+(`~/.local/share/mux/resume.json`); after a restore rebuilds the panes as
+bare shells at their old working directories, mux types each command into
+its pane. Panes matched by session and window name — a rename between save
+and restore drops that pane's resume — and only bare shells are typed into,
+so a session that already resumed is never typed over.
 
 ### Claude Code
 
@@ -87,8 +102,10 @@ tmux set-option -pu @humans_detail
 with their agent identity and model, turn `busy` while working, `message`
 (with the reason — needs direction, done, permission prompt, a blocking ask)
 when the agent has declared something for the human, and `idle` at an
-unsignalled rest. This works even with no humans.sh server running; the tmux
-options are a second, server-independent signal plane.
+unsignalled rest. It advertises `claude --resume <session-id>` at session
+start, so Claude sessions survive a reboot along with their windows. This
+works even with no humans.sh server running; the advertise plane is
+independent of the server.
 
 ## Development
 

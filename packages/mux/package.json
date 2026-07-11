@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "mux": "./src/cli.ts"
+  },
   "scripts": {
-    "dev": "bun run src/index.tsx"
+    "dev": "bun run src/cli.ts"
   },
   "dependencies": {
     "@humans/focus": "workspace:*",
