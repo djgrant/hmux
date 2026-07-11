@@ -59,6 +59,13 @@ export interface Backend {
    * behind and the picker opens empty (^n creates the first session).
    */
   ensure(): Promise<void>
+  /**
+   * Persist a snapshot of the current sessions when the backend has a
+   * persistence mechanism installed; a no-op otherwise. Called periodically
+   * while any mux process runs (picker or parked target), so restore always
+   * has something recent to replay.
+   */
+  save(): Promise<void>
   list(): Promise<SessionGroup[]>
   /** Bring the target to this terminal. Blocks until the user comes back. */
   open(target: string): Promise<void>

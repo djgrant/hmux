@@ -22,6 +22,10 @@ setBackend(backend)
 // substrate: after a reboot this is where sessions come back.
 await backend.ensure()
 
+// Keep the snapshot fresh while any mux process runs — picker, jumped-into
+// session, or parked target — so restore always has something recent.
+setInterval(() => void backend.save().catch(() => {}), 60_000)
+
 const arg = process.argv[2]
 
 // `mux target`: park this terminal as a display target. The picker (running

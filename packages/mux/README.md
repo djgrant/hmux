@@ -20,12 +20,14 @@ and opens sessions in place in whatever terminal you use.
 - Inside a session you're in plain tmux — your server, your config, your
   plugins. **`prefix d` (detach) returns to mux.** That's the only tmux you
   need to know.
-- After a reboot, `mux` is the whole boot story: every entrypoint starts by
-  making the substrate ready (`Backend.ensure()`), so a dead server is
-  birthed and — when tmux-resurrect is installed — the last snapshot is
-  restored before the picker appears. The server is born from the terminal
-  you ran mux in and inherits its macOS permission grants. An empty snapshot
-  leaves an empty picker (`^n` creates the first session).
+- mux respects your setup: with tmux-resurrect installed, sessions survive a
+  reboot. Every entrypoint starts by making the substrate ready
+  (`Backend.ensure()`), so a dead server is birthed and the last snapshot
+  restored before the picker appears; while any mux process runs (picker or
+  parked target) it saves a fresh snapshot every minute, so tmux-continuum
+  is not needed. Without resurrect, none of this happens. The server is born
+  from the terminal you ran mux in and inherits its macOS permission grants.
+  An empty snapshot leaves an empty picker (`^n` creates the first session).
 - `mux <name>` jumps straight into the best-matching session.
 - `mux target` parks a terminal as a **display target**: with one open,
   picking a session in mux loads it into that terminal and the picker stays

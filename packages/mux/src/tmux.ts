@@ -71,13 +71,28 @@ export async function insideTmux(): Promise<boolean> {
 const BOOT_SESSION = "__mux_boot"
 
 /** tpm's default and XDG plugin homes; null when resurrect isn't installed. */
-function resurrectRestoreScript(): string | null {
+function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
   const home = process.env.HOME ?? ""
   for (const base of [`${home}/.tmux/plugins`, `${home}/.config/tmux/plugins`]) {
-    const script = `${base}/tmux-resurrect/scripts/restore.sh`
+    const script = `${base}/tmux-resurrect/scripts/${name}`
     if (Bun.file(script).size > 0) return script
   }
   return null
+}
+
+/**
+ * Resurrect's scripts derive their socket from $TMUX, which is empty in a
+ * client-less process like mux — point it at the real socket explicitly.
+ */
+async function runResurrect(script: string, args: string[] = []): Promise<void> {
+  const socket = (await tmux(["display-message", "-p", "#{socket_path}"]).catch(() => "")).trim()
+  if (!socket) return
+  const proc = Bun.spawn([script, ...args], {
+    env: { ...process.env, TMUX: `${socket},,` },
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  await proc.exited
 }
 
 export class TmuxBackend implements Backend {
@@ -87,26 +102,28 @@ export class TmuxBackend implements Backend {
   async ensure(): Promise<void> {
     const alive = await tmux(["list-sessions"]).then(() => true, () => false)
     if (alive) return
-    const restore = resurrectRestoreScript()
+    const restore = resurrectScript("restore.sh")
     if (!restore) return // nothing to restore from; create() births the server later
 
     console.error("mux: no tmux server — restoring last snapshot…")
-    // Resurrect needs a live server to add sessions into, and derives its
-    // socket from $TMUX (empty here — we're a client-less process), so birth
-    // a scratch session and point $TMUX at the real socket ourselves.
+    // Resurrect needs a live server to add sessions into: birth a scratch
+    // session for it to work against.
     await tmux(["new-session", "-d", "-s", BOOT_SESSION])
-    const socket = (await tmux(["display-message", "-p", "#{socket_path}"]).catch(() => "")).trim()
-    if (socket) {
-      const proc = Bun.spawn([restore], {
-        env: { ...process.env, TMUX: `${socket},,` },
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      await proc.exited
-    }
+    await runResurrect(restore)
     // Drop the scratch session. If the snapshot was empty this kills the
     // server too — the picker opens empty rather than inventing a session.
     await tmux(["kill-session", "-t", BOOT_SESSION]).catch(() => {})
+  }
+
+  async save(): Promise<void> {
+    const script = resurrectScript("save.sh")
+    if (!script) return
+    // Only real sessions are worth snapshotting: saving while just mux's own
+    // plumbing exists would overwrite the last good snapshot with an empty one.
+    const out = await tmux(["list-sessions", "-F", "#{session_name}"]).catch(() => "")
+    const real = out.split("\n").filter((s) => s && s !== HOLD_SESSION && s !== BOOT_SESSION)
+    if (real.length === 0) return
+    await runResurrect(script, ["quiet"])
   }
 
   async list(): Promise<SessionGroup[]> {
