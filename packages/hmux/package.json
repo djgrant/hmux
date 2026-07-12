@@ -1,6 +1,6 @@
 {
   "name": "@djgrant/hmux",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A harness multiplexer built on top of tmux: jump between agent sessions and see what's happening inside them",
   "type": "module",
   "license": "MIT",
