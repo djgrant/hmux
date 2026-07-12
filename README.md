@@ -16,7 +16,7 @@ hmux target   # the terminal the picker opens into (optional)
 
 ## Packages
 
-- [`hmux`](packages/hmux) — the CLI: session picker, display targets, `hmux advertise` (tmux is the bundled backend)
+- [`@djgrant/hmux`](packages/hmux) — the CLI (installs the `hmux` binary): session picker, display targets, `hmux advertise` (tmux is the bundled backend)
 - [`@hmux/server`](packages/server) — local MCP endpoint (`ask`, `notify`, `signal`, `approve`) plus a WebSocket feed and session roster
 - [`hmux-cc-plugin`](packages/cc-plugin) — Claude Code hooks that register sessions, advertise their status, and wire up the MCP server
 - [`@hmux/protocol`](packages/protocol) — shared message types and WebSocket protocol
@@ -52,7 +52,7 @@ pok typecheck   # typecheck all packages
 
 ### Releasing
 
-`hmux`, `terminal-focus`, and `hmux-cc-plugin` are published to npm; `@hmux/protocol`, `@hmux/server`, and `@hmux/mailbox` stay private.
+`@djgrant/hmux`, `terminal-focus`, and `hmux-cc-plugin` are published to npm; `@hmux/protocol`, `@hmux/server`, and `@hmux/mailbox` stay private.
 
 ```sh
 pok version     # bumpp: bump the publishable packages, commit, tag v<x.y.z>, push

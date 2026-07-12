@@ -2,7 +2,7 @@ packages:
   - packages/*
 minimumReleaseAgeExclude:
   # Our own packages are dogfooded from the registry; never gate them by release age.
-  - 'hmux'
+  - '@djgrant/hmux'
   - 'terminal-focus'
   - 'hmux-cc-plugin'
   - '@hmux/*'
