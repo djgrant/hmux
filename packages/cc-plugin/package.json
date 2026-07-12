@@ -1,6 +1,6 @@
 {
   "name": "hmux-cc-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude Code hooks that register sessions, advertise their status, and wire up the hmux MCP server",
   "type": "module",
   "license": "MIT",
