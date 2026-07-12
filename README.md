@@ -30,11 +30,10 @@ Harness plugins enrich the picker with agents status.
 
 Currently, only Claude Code is supported, via [`hmux-cc-plugin`](packages/cc-plugin). 
 
-Install it from this repo:
+Load it into Claude Code:
 
 ```sh
-claude plugin marketplace add /path/to/hmux
-claude plugin install hmux@hmux
+claude --plugin-dir /path/to/hmux/packages/cc-plugin
 ```
 
 Other harnesses can register with the MCP server directly: `claude mcp add --transport http hmux http://localhost:7373/mcp`.

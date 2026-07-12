@@ -6,17 +6,10 @@ Requires [Bun](https://bun.sh) and an hmux server on `http://localhost:7373` (se
 
 ## Install
 
-Straight from this repo, no install step:
+Load it into Claude Code:
 
 ```sh
 claude --plugin-dir /path/to/hmux/packages/cc-plugin
-```
-
-Or persistently, via a local marketplace:
-
-```sh
-claude plugin marketplace add /path/to/hmux
-claude plugin install hmux@hmux
 ```
 
 ## What it does
