@@ -26,11 +26,9 @@ hmux target   # the terminal the picker opens into (optional)
 
 ## Integrations
 
-Currently, only Claude Code is supported, via [`@hmux/cc-plugin`](packages/cc-plugin). The plugin's hooks give every session a presence in the picker without the agent doing anything:
+Harness plugins enrich the picker with agents status.
 
-- Registers each session in the roster on start, with an agent name derived from its cwd.
-- Advertises live status into the session's row – busy while working, what it's asking when it asks, "needs direction" or "done" at turn end.
-- When you bind a session, injects context telling the agent to route questions (`ask`) and progress (`notify`) through the MCP server.
+Currently, only Claude Code is supported, via [`@hmux/cc-plugin`](packages/cc-plugin). 
 
 Install it from this repo:
 
