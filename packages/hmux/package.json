@@ -29,6 +29,7 @@
   },
   "scripts": {
     "dev": "bun run src/cli.ts",
+    "test": "bun test",
     "build": "bun build ./src/cli.ts --target=bun --outfile dist/cli.js --external @opentui/core --external @opentui/solid --external solid-js --external terminal-focus && bun build ../server/src/index.ts --target=bun --outfile dist/server.js",
     "prepublishOnly": "bun run build"
   },

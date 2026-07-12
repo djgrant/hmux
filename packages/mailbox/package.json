@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/index.tsx"
+    "dev": "bun run src/index.tsx",
+    "test": "bun test"
   },
   "dependencies": {
     "@hmux/protocol": "workspace:*",
