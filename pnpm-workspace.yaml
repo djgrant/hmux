@@ -6,3 +6,6 @@ minimumReleaseAgeExclude:
   - 'terminal-focus'
   - 'hmux-cc-plugin'
   - '@hmux/*'
+  - '@pokit/core@0.6.0'
+  - '@pokit/terminal@0.6.0'
+  - pokit@0.3.2

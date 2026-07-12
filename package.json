@@ -15,12 +15,14 @@
   "scripts": {
     "typecheck": "pnpm -r --if-present run typecheck",
     "build": "pnpm -r --if-present run build",
-    "test": "bun test",
-    "release": "bumpp --recursive"
+    "test": "bun test"
   },
   "devDependencies": {
+    "@pokit/core": "0.6.0",
+    "@pokit/terminal": "0.6.0",
     "bumpp": "^10.3.2",
     "bun-types": "latest",
+    "pokit": "0.3.2",
     "typescript": "^5"
   }
 }
