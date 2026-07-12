@@ -8,10 +8,18 @@
  */
 import { homedir } from "os"
 import { join } from "path"
-import { mkdirSync, openSync } from "fs"
+import { mkdirSync, openSync, existsSync } from "fs"
 
 const BASE = process.env.HMUX_URL ?? "http://localhost:7373"
-const ENTRY = join(import.meta.dir, "../../server/src/index.ts")
+// The server ships inside hmux. In a published build it's the bundled
+// `server.js` sitting beside this module in dist/; in the monorepo it's the
+// sibling `server` package's source. HMUX_SERVER_ENTRY overrides both.
+const ENTRY =
+  process.env.HMUX_SERVER_ENTRY ??
+  [
+    join(import.meta.dir, "server.js"), // published: dist/cli.js + dist/server.js
+    join(import.meta.dir, "../../server/src/index.ts"), // monorepo dev
+  ].find(existsSync)!
 
 export async function ensureServer(): Promise<void> {
   try {
@@ -22,9 +30,10 @@ export async function ensureServer(): Promise<void> {
     const dir = join(homedir(), ".hmux")
     mkdirSync(dir, { recursive: true })
     const log = openSync(join(dir, "server.log"), "a")
-    // cwd is the server package so its relative state (hmux.db) lands there.
+    // cwd is ~/.hmux so the server's relative state (hmux.db) lands there,
+    // not next to the install.
     Bun.spawn(["bun", "run", ENTRY], {
-      cwd: join(import.meta.dir, "../../server"),
+      cwd: dir,
       stdin: "ignore",
       stdout: log,
       stderr: log,

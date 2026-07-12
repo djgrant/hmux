@@ -4,7 +4,7 @@
  * and notification taps:
  *
  *   - a TUI is already running (live presence file) -> focus its terminal
- *     window/tab via @hmux/focus and stop
+ *     window/tab via terminal-focus and stop
  *   - otherwise -> launch it in a new iTerm window (Terminal.app fallback)
  *
  * The launch AppleScript lives here rather than in the Swift app so both
@@ -14,7 +14,7 @@
 
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { focusTerminal } from "@hmux/focus"
+import { focusTerminal } from "terminal-focus"
 import { livePresence } from "./presence"
 
 const live = livePresence()

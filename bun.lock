@@ -10,41 +10,41 @@
       },
     },
     "packages/cc-plugin": {
-      "name": "@hmux/cc-plugin",
+      "name": "hmux-cc-plugin",
       "version": "0.0.0",
       "bin": {
         "hmux-run": "./src/run.ts",
       },
     },
     "packages/focus": {
-      "name": "@hmux/focus",
+      "name": "terminal-focus",
       "version": "0.0.0",
       "bin": {
-        "hmux-focus": "src/cli.ts",
+        "terminal-focus": "src/cli.ts",
       },
     },
     "packages/hmux": {
-      "name": "@hmux/hmux",
+      "name": "hmux",
       "version": "0.0.0",
       "bin": {
         "hmux": "./src/cli.ts",
       },
       "dependencies": {
-        "@hmux/focus": "workspace:*",
         "@opentui/core": "^0.4.3",
         "@opentui/solid": "^0.4.3",
         "solid-js": "^1.9.0",
+        "terminal-focus": "workspace:*",
       },
     },
     "packages/mailbox": {
       "name": "@hmux/mailbox",
       "version": "0.0.0",
       "dependencies": {
-        "@hmux/focus": "workspace:*",
         "@hmux/protocol": "workspace:*",
         "@opentui/core": "^0.4.3",
         "@opentui/solid": "^0.4.3",
         "solid-js": "^1.9.0",
+        "terminal-focus": "workspace:*",
       },
     },
     "packages/protocol": {
@@ -120,12 +120,6 @@
     "@babel/traverse": ["@babel/traverse@7.29.7", "", { "dependencies": { "@babel/code-frame": "^7.29.7", "@babel/generator": "^7.29.7", "@babel/helper-globals": "^7.29.7", "@babel/parser": "^7.29.7", "@babel/template": "^7.29.7", "@babel/types": "^7.29.7", "debug": "^4.3.1" } }, "sha512-EhlfNQtZ+NK22w5BM61ciuiq1m58ed33Wr1Xan//ZRTy6hgjnwyCffRYwzsGXdASJSUJ1guZILsErh1eQcl+zw=="],
 
     "@babel/types": ["@babel/types@7.29.7", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA=="],
-
-    "@hmux/cc-plugin": ["@hmux/cc-plugin@workspace:packages/cc-plugin"],
-
-    "@hmux/focus": ["@hmux/focus@workspace:packages/focus"],
-
-    "@hmux/hmux": ["@hmux/hmux@workspace:packages/hmux"],
 
     "@hmux/mailbox": ["@hmux/mailbox@workspace:packages/mailbox"],
 
@@ -297,6 +291,10 @@
 
     "hasown": ["hasown@2.0.4", "", { "dependencies": { "function-bind": "^1.1.2" } }, "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A=="],
 
+    "hmux": ["hmux@workspace:packages/hmux"],
+
+    "hmux-cc-plugin": ["hmux-cc-plugin@workspace:packages/cc-plugin"],
+
     "hono": ["hono@4.12.27", "", {}, "sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q=="],
 
     "html-entities": ["html-entities@2.3.3", "", {}, "sha512-DV5Ln36z34NNTDgnz0EWGBLZENelNAtkiFA4kyNOG2tDI6Mz1uSWiq1wAKdyjnJwyDiDO7Fa2SO1CTxPXL8VxA=="],
@@ -444,6 +442,8 @@
     "strip-ansi": ["strip-ansi@7.1.2", "", { "dependencies": { "ansi-regex": "^6.0.1" } }, "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA=="],
 
     "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, "sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w=="],
+
+    "terminal-focus": ["terminal-focus@workspace:packages/focus"],
 
     "toidentifier": ["toidentifier@1.0.1", "", {}, "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="],
 

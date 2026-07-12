@@ -7,7 +7,7 @@
  */
 import { statSync } from "node:fs"
 import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
-import { focusTerminal } from "@hmux/focus"
+import { focusTerminal } from "terminal-focus"
 import { HOLD_SESSION, registeredTargets } from "./targets"
 
 const SEP = "\x1f" // unit separator: can't appear in names/paths

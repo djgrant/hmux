@@ -1,12 +1,17 @@
 {
-  "name": "@hmux/focus",
-  "version": "0.0.0",
-  "private": true,
+  "name": "terminal-focus",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
-    "hmux-focus": "src/cli.ts"
+    "terminal-focus": "src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
   }
 }

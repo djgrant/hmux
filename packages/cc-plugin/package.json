@@ -1,9 +1,14 @@
 {
-  "name": "@hmux/cc-plugin",
-  "version": "0.0.0",
-  "private": true,
+  "name": "hmux-cc-plugin",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
     "hmux-run": "./src/run.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
   }
 }
