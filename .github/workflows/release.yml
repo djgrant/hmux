@@ -73,10 +73,11 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      # OIDC trusted publishing: the `id-token: write` permission lets pnpm mint
+      # a short-lived, workflow-scoped credential from npm — no NPM_TOKEN secret.
+      # `--provenance` stamps a signed build-provenance attestation on each package.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm -r publish --access public --no-git-checks --provenance
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
