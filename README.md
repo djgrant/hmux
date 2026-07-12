@@ -1,16 +1,18 @@
 # hmux
 
-A harness multiplexer: a terminal session dashboard that shows which agents need you, and jumps you to them.
+A harness multiplexer built on top of tmux. 
+
+### Features
+
+- Quickly jump between your agent sessions
+- Get a high-level overview of what's happening inside them
+
+## Usage
 
 ```sh
 hmux          # the picker; also starts the MCP server when it isn't running
-hmux <name>   # jump straight into the best-matching session
-hmux target   # park this terminal as the display target the picker opens into
+hmux target   # the terminal the picker opens into (optional)
 ```
-
-Agents advertise their state (busy, waiting on you, errored) from inside their panes; the picker rolls those signals up into one list; you jump into the session that needs you.
-
-See [packages/hmux](packages/hmux) for keybindings and the advertise protocol.
 
 ## Packages
 
@@ -22,6 +24,19 @@ See [packages/hmux](packages/hmux) for keybindings and the advertise protocol.
 - [`@hmux/mailbox`](packages/mailbox) — terminal inbox for agent messages. Reflects an older model – the picker has largely absorbed its job – and may not stay.
 - [`app`](app) — Mac menu-bar app for notifications, server supervision, and setup. Also predates the current model; undecided where it lands.
 
-## Server
+## Integrations
 
-Any hmux entrypoint starts the server when the port is silent, detached, so it outlives the picker. Register agents via the Claude Code plugin, or directly: `claude mcp add --transport http hmux http://localhost:7373/mcp`.
+Currently, only Claude Code is supported, via [`@hmux/cc-plugin`](packages/cc-plugin). The plugin's hooks give every session a presence in the picker without the agent doing anything:
+
+- Registers each session in the roster on start, with an agent name derived from its cwd.
+- Advertises live status into the session's row – busy while working, what it's asking when it asks, "needs direction" or "done" at turn end.
+- When you bind a session, injects context telling the agent to route questions (`ask`) and progress (`notify`) through the MCP server.
+
+Install it from this repo:
+
+```sh
+claude plugin marketplace add /path/to/hmux
+claude plugin install hmux@hmux
+```
+
+Other harnesses can register with the MCP server directly: `claude mcp add --transport http hmux http://localhost:7373/mcp`.

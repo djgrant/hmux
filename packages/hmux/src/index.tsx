@@ -2,7 +2,7 @@ import { render } from "@opentui/solid"
 import { App } from "./App"
 import { MAIN_BG } from "./theme"
 import { TmuxBackend, insideTmux } from "./tmux"
-import { fuzzyScore, setBackend } from "./store"
+import { setBackend } from "./store"
 import { ensureServer } from "./server"
 
 // Full-screen TUI sizes itself from STDOUT; refuse to render clamped into a
@@ -19,19 +19,17 @@ const inTmux = await insideTmux()
 const backend = new TmuxBackend(inTmux)
 setBackend(backend)
 
-// Every entrypoint (hmux, hmux <name>, hmux target) starts from a ready
-// substrate: after a reboot this is where sessions come back, and the
-// backend keeps its snapshot fresh from here on.
+// Every entrypoint (hmux, hmux target) starts from a ready substrate: after
+// a reboot this is where sessions come back, and the backend keeps its
+// snapshot fresh from here on.
 await backend.ensure()
 // The hmux server (MCP + roster) is substrate too: birthed here when the
 // port is silent, detached so it outlives the picker.
 await ensureServer()
 
-const arg = process.argv[2]
-
 // `hmux target`: park this terminal as a display target. The picker (running
 // anywhere else) routes opens into this terminal and stays on screen itself.
-if (arg === "target") {
+if (process.argv[2] === "target") {
   if (inTmux) {
     console.error("hmux target: run this in a terminal that is not already inside tmux.")
     process.exit(1)
@@ -98,18 +96,6 @@ if (arg === "target") {
     unregisterTarget(tty)
   }
   process.exit(0)
-}
-
-// `hmux <name>` jumps straight into the best-matching session; the router
-// appears when the user detaches (prefix d).
-if (arg) {
-  const groups = await backend.list()
-  const best = groups
-    .map((g) => ({ g, score: fuzzyScore(g.name, arg) }))
-    .filter((s) => s.score >= 0)
-    .sort((a, b) => b.score - a.score)[0]
-  if (best) await backend.open(best.g.target)
-  else console.error(`hmux: no session matching "${arg}"`)
 }
 
 render(() => <App backend={backend} />, { backgroundColor: MAIN_BG })

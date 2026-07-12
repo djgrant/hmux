@@ -31,7 +31,6 @@ and opens sessions in place in whatever terminal you use.
   is not needed. Without resurrect, none of this happens. The server is born
   from the terminal you ran hmux in and inherits its macOS permission grants.
   An empty snapshot leaves an empty picker (`^n` creates the first session).
-- `hmux <name>` jumps straight into the best-matching session.
 - `hmux target` parks a terminal as a **display target**: with one open,
   picking a session in hmux loads it into that terminal and the picker stays
   on screen — hmux becomes a window manager across your terminal windows
