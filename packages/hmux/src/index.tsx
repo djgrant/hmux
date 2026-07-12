@@ -3,6 +3,7 @@ import { App } from "./App"
 import { MAIN_BG } from "./theme"
 import { TmuxBackend, insideTmux } from "./tmux"
 import { fuzzyScore, setBackend } from "./store"
+import { ensureServer } from "./server"
 
 // Full-screen TUI sizes itself from STDOUT; refuse to render clamped into a
 // corner when stdout is a pipe (same guard as @hmux/mailbox, round 21).
@@ -22,6 +23,9 @@ setBackend(backend)
 // substrate: after a reboot this is where sessions come back, and the
 // backend keeps its snapshot fresh from here on.
 await backend.ensure()
+// The hmux server (MCP + roster) is substrate too: birthed here when the
+// port is silent, detached so it outlives the picker.
+await ensureServer()
 
 const arg = process.argv[2]
 
