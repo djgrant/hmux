@@ -1,7 +1,18 @@
 {
   "name": "terminal-focus",
   "version": "0.1.0",
+  "description": "Focus the terminal window that owns a given tty",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djgrant/hmux.git",
+    "directory": "packages/focus"
+  },
+  "homepage": "https://github.com/djgrant/hmux#readme",
+  "bugs": {
+    "url": "https://github.com/djgrant/hmux/issues"
+  },
   "bin": {
     "terminal-focus": "src/cli.ts"
   },
@@ -9,8 +20,13 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "src"
+    "src",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "bun": ">=1.0.0"
   }

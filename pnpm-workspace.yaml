@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+minimumReleaseAgeExclude:
+  # Our own packages are dogfooded from the registry; never gate them by release age.
+  - 'hmux'
+  - 'terminal-focus'
+  - 'hmux-cc-plugin'
+  - '@hmux/*'

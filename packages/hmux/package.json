@@ -1,13 +1,29 @@
 {
   "name": "hmux",
   "version": "0.1.0",
+  "description": "A harness multiplexer built on top of tmux: jump between agent sessions and see what's happening inside them",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djgrant/hmux.git",
+    "directory": "packages/hmux"
+  },
+  "homepage": "https://github.com/djgrant/hmux#readme",
+  "bugs": {
+    "url": "https://github.com/djgrant/hmux/issues"
+  },
   "bin": {
     "hmux": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "bun": ">=1.0.0"
   },

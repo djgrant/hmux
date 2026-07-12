@@ -1,8 +1,25 @@
 {
   "name": "@hmux/monorepo",
   "private": true,
-  "workspaces": ["packages/*"],
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djgrant/hmux.git"
+  },
+  "homepage": "https://github.com/djgrant/hmux#readme",
+  "bugs": {
+    "url": "https://github.com/djgrant/hmux/issues"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "build": "pnpm -r --if-present run build",
+    "test": "bun test",
+    "release": "bumpp --recursive"
+  },
   "devDependencies": {
+    "bumpp": "^10.3.2",
     "bun-types": "latest",
     "typescript": "^5"
   }
