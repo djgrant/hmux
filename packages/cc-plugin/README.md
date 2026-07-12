@@ -6,7 +6,12 @@ Requires [Bun](https://bun.sh) and an hmux server on `http://localhost:7373` (se
 
 ## Install
 
-Load it into Claude Code:
+```sh
+claude plugin marketplace add djgrant/hmux
+claude plugin install hmux@hmux
+```
+
+Or, for local development, load it straight from a checkout:
 
 ```sh
 claude --plugin-dir /path/to/hmux/packages/cc-plugin

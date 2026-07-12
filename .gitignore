@@ -2,4 +2,3 @@ node_modules
 *.db
 dist
 repos/
-.claude-plugin/
