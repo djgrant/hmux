@@ -2,12 +2,8 @@
 
 ## Vendored Repositories
 
-This project vendors external repositories under `./repos` as read-only reference material:
+External repositories may be vendored locally under `./repos` as read-only reference material. `./repos` is git-ignored: it is never committed or pushed, so it stays out of the published history.
 
-- `repos/effect` — [Effect-TS/effect](https://github.com/Effect-TS/effect) (`main`)
-- `repos/opencode` — [anomalyco/opencode](https://github.com/anomalyco/opencode) (`dev`)
-- `repos/opentui` — [anomalyco/opentui](https://github.com/anomalyco/opentui) (`main`)
-
-Prefer examples from vendored source code over search results.
+When the directory is present, prefer examples from its source over search results.
 
 Do not import from `./repos`; application code should continue importing from normal package dependencies.
