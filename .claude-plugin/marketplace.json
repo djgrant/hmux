@@ -1,11 +1,11 @@
 {
-  "name": "humans-sh",
+  "name": "hmux",
   "owner": { "name": "djgrant" },
   "plugins": [
     {
-      "name": "humans",
+      "name": "hmux",
       "source": "./packages/cc-plugin",
-      "description": "Session presence and human-in-the-loop inbox for Claude Code via a local humans.sh server"
+      "description": "Session presence and human-in-the-loop inbox for Claude Code via a local hmux server"
     }
   ]
 }

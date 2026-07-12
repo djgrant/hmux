@@ -24,7 +24,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "mcp__humans__.*",
+        "matcher": "mcp__hmux__.*",
         "hooks": [
           {
             "type": "command",

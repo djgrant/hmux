@@ -1,5 +1,5 @@
 {
-  "name": "@humans/protocol",
+  "name": "@hmux/protocol",
   "version": "0.0.0",
   "private": true,
   "type": "module",

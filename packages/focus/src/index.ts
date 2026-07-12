@@ -91,7 +91,7 @@ async function osascript(script: string): Promise<void> {
 
 /** Stamp the target's title via its tty, run the app's find-by-name script, unstamp. */
 async function stampAndFocus(tty: string, script: (marker: string) => string): Promise<void> {
-  const marker = `humans-focus ${tty}`
+  const marker = `hmux-focus ${tty}`
   try {
     writeFileSync(tty, `\x1b]0;${marker}\x07`)
   } catch {

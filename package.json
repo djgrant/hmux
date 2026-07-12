@@ -1,5 +1,5 @@
 {
-  "name": "humans.sh",
+  "name": "@hmux/monorepo",
   "private": true,
   "workspaces": ["packages/*"],
   "devDependencies": {

@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
- * humans-run — headless Claude Code with permission prompts in your inbox.
+ * hmux-run — headless Claude Code with permission prompts in your inbox.
  *
- *   humans-run "task..." [--agent name]
+ *   hmux-run "task..." [--agent name]
  *
- * Registers a session on the humans.sh server (so approvals/asks carry a
- * roster identity), writes a temp mcp-config whose humans server sends the
- * identity headers (x-humans-agent/-project/-session), then runs
+ * Registers a session on the hmux server (so approvals/asks carry a
+ * roster identity), writes a temp mcp-config whose hmux server sends the
+ * identity headers (x-hmux-agent/-project/-session), then runs
  *
- *   claude -p "task" --permission-prompt-tool mcp__humans__approve --mcp-config <tmp>
+ *   claude -p "task" --permission-prompt-tool mcp__hmux__approve --mcp-config <tmp>
  *
  * streaming claude's output through. Permissions are NOT skipped — every
- * prompt lands in the TUI's approvals section. The session is marked ended
+ * prompt lands in the mailbox's approvals section. The session is marked ended
  * when claude exits. Registration is best-effort: if the server is down we
  * warn and continue (approvals then block until it's back).
  */
@@ -20,16 +20,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const BASE = process.env.HUMANS_URL ?? "http://localhost:7373"
+const BASE = process.env.HMUX_URL ?? "http://localhost:7373"
 
 export interface RunConfig {
   sessionId: string
   agent: string
   project: string
-  /** JSON for --mcp-config: humans server + identity headers. */
+  /** JSON for --mcp-config: hmux server + identity headers. */
   mcpConfig: {
     mcpServers: {
-      humans: {
+      hmux: {
         type: "http"
         url: string
         headers: Record<string, string>
@@ -61,13 +61,13 @@ export function buildRunConfig(opts: {
     project: opts.cwd,
     mcpConfig: {
       mcpServers: {
-        humans: {
+        hmux: {
           type: "http",
           url: `${base}/mcp`,
           headers: {
-            "x-humans-agent": agent,
-            "x-humans-project": opts.cwd,
-            "x-humans-session": sessionId
+            "x-hmux-agent": agent,
+            "x-hmux-project": opts.cwd,
+            "x-hmux-session": sessionId
           }
         }
       }
@@ -76,14 +76,14 @@ export function buildRunConfig(opts: {
       "-p",
       opts.task,
       "--permission-prompt-tool",
-      "mcp__humans__approve",
+      "mcp__hmux__approve",
       "--mcp-config",
       mcpConfigPath
     ]
   }
 }
 
-/** Parse `humans-run "task..." [--agent name]`. Returns null on bad usage. */
+/** Parse `hmux-run "task..." [--agent name]`. Returns null on bad usage. */
 export function parseArgs(argv: string[]): { task: string; agent?: string } | null {
   const words: string[] = []
   let agent: string | undefined
@@ -104,7 +104,7 @@ export function parseArgs(argv: string[]): { task: string; agent?: string } | nu
 const main = async () => {
   const parsed = parseArgs(process.argv.slice(2))
   if (!parsed) {
-    console.error('usage: humans-run "task..." [--agent name]')
+    console.error('usage: hmux-run "task..." [--agent name]')
     process.exit(2)
   }
   const config = buildRunConfig({ task: parsed.task, cwd: process.cwd(), agent: parsed.agent })
@@ -124,10 +124,10 @@ const main = async () => {
       signal: AbortSignal.timeout(2000)
     })
   } catch {
-    console.error(`humans-run: warning — could not register with ${BASE} (server down?)`)
+    console.error(`hmux-run: warning — could not register with ${BASE} (server down?)`)
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "humans-run-"))
+  const dir = mkdtempSync(join(tmpdir(), "hmux-run-"))
   const mcpConfigPath = join(dir, "mcp-config.json")
   writeFileSync(mcpConfigPath, JSON.stringify(config.mcpConfig))
 
@@ -144,7 +144,7 @@ const main = async () => {
       signal: AbortSignal.timeout(2000)
     })
   } catch {
-    // Best-effort; the TUI's staleness handling covers a missed end.
+    // Best-effort; the mailbox's staleness handling covers a missed end.
   }
   rmSync(dir, { recursive: true, force: true })
   process.exit(exitCode)

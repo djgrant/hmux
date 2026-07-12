@@ -6,7 +6,7 @@ import {
   isClientEvent,
   isSessionStatus,
   type ServerEvent
-} from "@humans/protocol"
+} from "@hmux/protocol"
 import { Hub, HubLive } from "./hub"
 import { Store, StoreLive } from "./store"
 import { makeMcpHandler } from "./mcp"
@@ -31,7 +31,7 @@ if (process.env.HUMANS_SUPERVISED === "1") {
 }
 
 const WS_TOPIC = "events"
-const port = Number(process.env.HUMANS_PORT ?? DEFAULT_PORT)
+const port = Number(process.env.HMUX_PORT ?? DEFAULT_PORT)
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -170,9 +170,9 @@ await run(
   )
 )
 
-console.log(`humans.sh server listening on http://localhost:${server.port}`)
-console.log(`  TUI websocket:  ws://localhost:${server.port}${WS_PATH}`)
+console.log(`hmux server listening on http://localhost:${server.port}`)
+console.log(`  mailbox websocket:  ws://localhost:${server.port}${WS_PATH}`)
 console.log(`  MCP endpoint:   http://localhost:${server.port}${MCP_PATH}`)
 console.log(
-  `  Register with:  claude mcp add --transport http humans http://localhost:${server.port}${MCP_PATH}`
+  `  Register with:  claude mcp add --transport http hmux http://localhost:${server.port}${MCP_PATH}`
 )

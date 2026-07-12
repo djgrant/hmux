@@ -4,7 +4,7 @@ import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/proto
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js"
 import { Effect } from "effect"
 import { z } from "zod"
-import type { Message } from "@humans/protocol"
+import type { Message } from "@hmux/protocol"
 import { Hub } from "./hub"
 
 type Runner = <A, E>(effect: Effect.Effect<A, E, Hub>) => Promise<A>
@@ -59,7 +59,7 @@ const startKeepAlive = (
       void extra
         .sendNotification({
           method: "notifications/message",
-          params: { level: "debug", data: `humans.sh: ${waitingText}` }
+          params: { level: "debug", data: `hmux: ${waitingText}` }
         })
         .catch(() => {})
     }
@@ -68,12 +68,12 @@ const startKeepAlive = (
 }
 
 /**
- * Caller identity carried on the /mcp request as headers (the humans-run
+ * Caller identity carried on the /mcp request as headers (the hmux-run
  * wrapper and other integrations set them via mcp-config):
  *
- *   x-humans-agent    default agent name
- *   x-humans-project  default project
- *   x-humans-session  registered session id — resolves to that session's
+ *   x-hmux-agent    default agent name
+ *   x-hmux-project  default project
+ *   x-hmux-session  registered session id — resolves to that session's
  *                     agent/project and bumps its last_seen per tool call
  *
  * Tool ARGS always win over headers; headers win over the random fallback.
@@ -87,7 +87,7 @@ export interface McpIdentity {
 const buildServer = (run: Runner, identity: McpIdentity = {}) => {
   /**
    * Resolve the effective identity for one tool call. A registered session —
-   * via the harness-stamped sessionId arg or the x-humans-session header — is
+   * via the harness-stamped sessionId arg or the x-hmux-session header — is
    * AUTHORITATIVE: its agent/project override anything the model wrote in the
    * tool args, so an agent cannot impersonate another by lying in params.
    * Resolving also doubles as a liveness touch. Without a registered session,
@@ -110,7 +110,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
     .string()
     .optional()
     .describe(
-      "Your humans.sh session id (the Claude Code plugin stamps this automatically; " +
+      "Your hmux session id (the Claude Code plugin stamps this automatically; " +
         "leave unset otherwise)"
     )
 
@@ -127,7 +127,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
   // `logging` capability is required for the notifications/message keep-alives
   // that hold the HTTP stream open for token-less clients during a blocked ask.
   const server = new McpServer(
-    { name: "humans", version: "0.0.0" },
+    { name: "hmux", version: "0.0.0" },
     { capabilities: { logging: {} } }
   )
 
@@ -199,7 +199,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
       title: "Ask the human to approve a tool use",
       description:
         "Permission-prompt tool for headless Claude Code sessions (pass " +
-        "--permission-prompt-tool mcp__humans__approve). Sends the requested tool use to " +
+        "--permission-prompt-tool mcp__hmux__approve). Sends the requested tool use to " +
         "the human inbox and BLOCKS until they allow or deny it. Returns the " +
         "permission-result JSON Claude Code expects.",
       inputSchema: {
@@ -216,7 +216,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
     },
     async ({ tool_name, input, tool_use_id: _toolUseId, agent, project, sessionId }, extra) => {
       // Claude Code calls this tool itself with only tool_name/input/
-      // tool_use_id — identity comes from the request headers (humans-run).
+      // tool_use_id — identity comes from the request headers (hmux-run).
       const resolved = await resolveIdentity(sessionId)
       const { agent: effectiveAgent, project: effectiveProject } =
         effectiveIdentity(resolved, agent, project)
@@ -314,7 +314,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
     },
     async ({ status, sessionId }) => {
       // The signal itself is delivered out-of-band: the Claude Code plugin's
-      // PreToolUse hook sees this call and advertises the label into the mux
+      // PreToolUse hook sees this call and advertises the label into the hmux
       // plane at Stop. Server-side there is nothing to publish — no inbox
       // message, no blocking — so this handler is just an identity touch.
       await resolveIdentity(sessionId)
@@ -336,9 +336,9 @@ export const makeMcpHandler = (run: Runner) => async (req: Request): Promise<Res
   // Per-request server: the caller's identity headers close over the tool
   // handlers for exactly this request.
   const identity: McpIdentity = {
-    agent: req.headers.get("x-humans-agent") ?? undefined,
-    project: req.headers.get("x-humans-project") ?? undefined,
-    session: req.headers.get("x-humans-session") ?? undefined
+    agent: req.headers.get("x-hmux-agent") ?? undefined,
+    project: req.headers.get("x-hmux-project") ?? undefined,
+    session: req.headers.get("x-hmux-session") ?? undefined
   }
   const server = buildServer(run, identity)
   await server.connect(transport)

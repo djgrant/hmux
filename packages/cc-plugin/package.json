@@ -1,9 +1,9 @@
 {
-  "name": "@humans/cc-plugin",
+  "name": "@hmux/cc-plugin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "bin": {
-    "humans-run": "./src/run.ts"
+    "hmux-run": "./src/run.ts"
   }
 }

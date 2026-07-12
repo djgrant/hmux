@@ -1,11 +1,11 @@
-# @humans/focus
+# @hmux/focus
 
 Brings the terminal window or tab attached to a tty to the front, even when that means switching tabs inside an app, or the terminal belongs to a different app than the caller.
 
 ## Quick start
 
 ```ts
-import { focusTerminal } from "@humans/focus"
+import { focusTerminal } from "@hmux/focus"
 
 await focusTerminal({ tty: "/dev/ttys012", program: "iTerm.app" })
 ```
@@ -13,7 +13,7 @@ await focusTerminal({ tty: "/dev/ttys012", program: "iTerm.app" })
 Or from anything that can run a shell:
 
 ```sh
-humans-focus /dev/ttys012 iTerm.app
+hmux-focus /dev/ttys012 iTerm.app
 ```
 
 ## How it works

@@ -5,7 +5,7 @@ import {
   isServerEvent,
   type Message,
   type ServerEvent
-} from "@humans/protocol"
+} from "@hmux/protocol"
 
 const PORT = 7911
 const BASE = `http://localhost:${PORT}`
@@ -17,8 +17,8 @@ beforeAll(async () => {
   proc = Bun.spawn(["bun", "run", `${import.meta.dir}/../src/index.ts`], {
     env: {
       ...process.env,
-      HUMANS_PORT: String(PORT),
-      HUMANS_DB: DB,
+      HMUX_PORT: String(PORT),
+      HMUX_DB: DB,
       // Fast keep-alive ticks so the blocked-tool session-touch is testable.
       HUMANS_PROGRESS_INTERVAL_MS: "100"
     },
@@ -91,7 +91,7 @@ test("ask blocks until answered via WS, then returns the answer", async () => {
       question: "Ship it?",
       context: "e2e test",
       agent: "e2e-agent",
-      project: "humans.sh"
+      project: "hmux"
     }
   })
 
@@ -142,7 +142,7 @@ test("approve blocks, then returns the permission-result JSON (allow and deny)",
       input: { command: "rm -rf dist" },
       tool_use_id: "tu-1",
       agent: "e2e-agent",
-      project: "humans.sh"
+      project: "hmux"
     }
   })
   const created = await waitFor(() =>
@@ -153,7 +153,7 @@ test("approve blocks, then returns the permission-result JSON (allow and deny)",
   )
   expect(created.message.body).toContain("wants to run Bash")
   expect(created.message.body).toContain("rm -rf dist")
-  expect(created.message.suggestion).toBe("allow") // the TUI ghost
+  expect(created.message.suggestion).toBe("allow") // the mailbox ghost
   ws.send(JSON.stringify({ type: "answer", id: created.message.id, text: "allow" }))
   const allowResult = (await allowCall) as { content: Array<{ type: string; text: string }> }
   expect(JSON.parse(allowResult.content[0]!.text)).toEqual({
@@ -189,7 +189,7 @@ test("identity headers default agent/project; args win; session header resolves 
 
   // Header identity as the default: approve without agent/project args
   // (exactly how Claude Code's own permission-tool invocation arrives).
-  const c1 = await connectMcp({ "x-humans-agent": "hdr-bot", "x-humans-project": "hdr-proj" })
+  const c1 = await connectMcp({ "x-hmux-agent": "hdr-bot", "x-hmux-project": "hdr-proj" })
   const approveCall = c1.callTool({
     name: "approve",
     arguments: { tool_name: "Bash", input: { command: "make" } }
@@ -228,7 +228,7 @@ test("identity headers default agent/project; args win; session header resolves 
   })
   const before = ((await regRes.json()) as { lastSeen: number }).lastSeen
   await Bun.sleep(5)
-  const c2 = await connectMcp({ "x-humans-session": "hdr-sess", "x-humans-agent": "ignored-bot" })
+  const c2 = await connectMcp({ "x-hmux-session": "hdr-sess", "x-hmux-agent": "ignored-bot" })
   await c2.callTool({ name: "notify", arguments: { message: "sess notify" } })
   const sessMsg = await waitFor(() =>
     events.find(
@@ -251,7 +251,7 @@ test("a blocked tool call keeps the matching session's lastSeen fresh", async ()
   const registerRes = await fetch(`${BASE}/sessions/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id: "touch-1", agent: "touch-agent", project: "humans.sh" })
+    body: JSON.stringify({ id: "touch-1", agent: "touch-agent", project: "hmux" })
   })
   const before = ((await registerRes.json()) as { lastSeen: number }).lastSeen
 
@@ -260,7 +260,7 @@ test("a blocked tool call keeps the matching session's lastSeen fresh", async ()
   const client = await connectMcp()
   const call = client.callTool({
     name: "ask",
-    arguments: { question: "Blocked?", agent: "touch-agent", project: "humans.sh" }
+    arguments: { question: "Blocked?", agent: "touch-agent", project: "hmux" }
   })
   const created = await waitFor(() =>
     events.find(

@@ -1,10 +1,10 @@
 {
-  "name": "@humans/focus",
+  "name": "@hmux/focus",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "bin": {
-    "humans-focus": "src/cli.ts"
+    "hmux-focus": "src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"

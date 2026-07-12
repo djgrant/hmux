@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "humans": {
+    "hmux": {
       "type": "http",
       "url": "http://localhost:7373/mcp"
     }

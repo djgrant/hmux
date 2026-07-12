@@ -11,19 +11,19 @@ test("buildRunConfig: identity headers, claude args, no permission skipping", ()
   })
   expect(cfg.agent).toBe("release-bot")
   expect(cfg.project).toBe("/Users/me/code/my-proj")
-  expect(cfg.mcpConfig.mcpServers.humans.type).toBe("http")
-  expect(cfg.mcpConfig.mcpServers.humans.url).toBe("http://localhost:7999/mcp")
-  expect(cfg.mcpConfig.mcpServers.humans.headers).toEqual({
-    "x-humans-agent": "release-bot",
-    "x-humans-project": "/Users/me/code/my-proj",
-    "x-humans-session": "sid-1234"
+  expect(cfg.mcpConfig.mcpServers.hmux.type).toBe("http")
+  expect(cfg.mcpConfig.mcpServers.hmux.url).toBe("http://localhost:7999/mcp")
+  expect(cfg.mcpConfig.mcpServers.hmux.headers).toEqual({
+    "x-hmux-agent": "release-bot",
+    "x-hmux-project": "/Users/me/code/my-proj",
+    "x-hmux-session": "sid-1234"
   })
   const args = cfg.claudeArgs("/tmp/mcp.json")
   expect(args).toEqual([
     "-p",
     "run the release script",
     "--permission-prompt-tool",
-    "mcp__humans__approve",
+    "mcp__hmux__approve",
     "--mcp-config",
     "/tmp/mcp.json"
   ])

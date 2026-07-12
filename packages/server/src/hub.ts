@@ -1,5 +1,5 @@
 import { Context, Deferred, Effect, Layer } from "effect"
-import type { Message, ServerEvent, Session, SessionStatus } from "@humans/protocol"
+import type { Message, ServerEvent, Session, SessionStatus } from "@hmux/protocol"
 import { Store } from "./store"
 
 export interface RegisterSessionInput {
@@ -34,7 +34,7 @@ const quietSession = (id: string): Session => ({
  *    ServerEvents. The actual fan-out is injected by the HTTP layer (Bun's
  *    server.publish) via setBroadcast.
  */
-export class Hub extends Context.Tag("@humans/server/Hub")<
+export class Hub extends Context.Tag("@hmux/server/Hub")<
   Hub,
   {
     readonly setBroadcast: (fn: (event: ServerEvent) => void) => Effect.Effect<void>
@@ -64,13 +64,13 @@ export class Hub extends Context.Tag("@humans/server/Hub")<
      * Bump last_seen for the live session matching an agent name (exact
      * agent+project preferred). Deliberately does NOT broadcast: this fires
      * on every keep-alive tick of a blocked ask/approve, and spamming
-     * session.updated every ~20s buys nothing — the TUI computes staleness
+     * session.updated every ~20s buys nothing — the mailbox computes staleness
      * from its own clock, so the fresher last_seen reaches clients with the
      * next real session event (or the init frame on reconnect).
      */
     readonly touchSessionByAgent: (agent: string, project?: string) => Effect.Effect<void>
     /**
-     * Bump last_seen for a session by id (x-humans-session header) and return
+     * Bump last_seen for a session by id (x-hmux-session header) and return
      * it so tool calls can adopt its registered identity. No broadcast — same
      * tradeoff as touchSessionByAgent.
      */

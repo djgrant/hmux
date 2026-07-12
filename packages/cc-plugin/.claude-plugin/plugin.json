@@ -1,7 +1,7 @@
 {
-  "name": "humans",
-  "displayName": "humans.sh",
+  "name": "hmux",
+  "displayName": "hmux",
   "version": "0.0.0",
   "author": { "name": "djgrant" },
-  "description": "Registers Claude Code sessions with a local humans.sh server: live presence (working / idle / needs-attention) and an optional per-session binding that routes questions and progress updates through the human's inbox via MCP."
+  "description": "Registers Claude Code sessions with a local hmux server: live presence (working / idle / needs-attention) and an optional per-session binding that routes questions and progress updates through the human's inbox via MCP."
 }

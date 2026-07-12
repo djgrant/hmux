@@ -3,20 +3,20 @@ import {
   isServerEvent,
   type ServerEvent,
   type Session
-} from "@humans/protocol"
+} from "@hmux/protocol"
 
 const PORT = 7912
 const BASE = `http://localhost:${PORT}`
 const DB = `${import.meta.dir}/.sessions-${Date.now()}.db`
 const HOOK = `${import.meta.dir}/../../cc-plugin/src/hook.ts`
-// Isolated bound-marker state dir so hook runs never touch the real ~/.humans.
+// Isolated bound-marker state dir so hook runs never touch the real ~/.hmux.
 const STATE = `${import.meta.dir}/.hook-state-${Date.now()}`
 
 let proc: Bun.Subprocess
 
 beforeAll(async () => {
   proc = Bun.spawn(["bun", "run", `${import.meta.dir}/../src/index.ts`], {
-    env: { ...process.env, HUMANS_PORT: String(PORT), HUMANS_DB: DB },
+    env: { ...process.env, HMUX_PORT: String(PORT), HMUX_DB: DB },
     stdout: "ignore",
     stderr: "inherit"
   })
@@ -72,7 +72,7 @@ const runHook = async (input: Record<string, unknown>, env?: Record<string, stri
   const hookProc = Bun.spawn(["bun", "run", HOOK], {
     // TMUX_PANE is cleared so hook runs never advertise onto the real pane
     // this test suite happens to run inside.
-    env: { ...process.env, TMUX_PANE: "", HUMANS_URL: BASE, HUMANS_STATE_DIR: STATE, ...env },
+    env: { ...process.env, TMUX_PANE: "", HMUX_URL: BASE, HMUX_STATE_DIR: STATE, ...env },
     stdin: new TextEncoder().encode(JSON.stringify(input)),
     stdout: "pipe",
     stderr: "pipe"
@@ -97,13 +97,13 @@ test("session lifecycle: register -> status -> bind via WS -> end", async () => 
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       id: "sess-1",
-      project: "/Users/me/code/humans.sh",
+      project: "/Users/me/code/hmux",
       model: "claude-fable-5"
     })
   })
   expect(registerRes.ok).toBe(true)
   const registered = (await registerRes.json()) as Session
-  expect(registered.agent).toBe("humans.sh-sess")
+  expect(registered.agent).toBe("hmux-sess")
   expect(registered.status).toBe("idle") // at its prompt until a prompt/tool says otherwise
   expect(registered.bound).toBe(false)
 
@@ -113,7 +113,7 @@ test("session lifecycle: register -> status -> bind via WS -> end", async () => 
         e.type === "session.updated" && e.session.id === "sess-1"
     )
   )
-  expect(registeredEvent.session.project).toBe("/Users/me/code/humans.sh")
+  expect(registeredEvent.session.project).toBe("/Users/me/code/hmux")
 
   // Status update bumps lastSeen
   await Bun.sleep(5)
@@ -280,16 +280,16 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
   expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit")
-  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__ask")
-  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__humans__notify")
+  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__hmux__ask")
+  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__hmux__notify")
 
-  // PreToolUse on a humans tool: the harness session id is stamped into the
+  // PreToolUse on an hmux tool: the harness session id is stamped into the
   // tool input, overriding a model-supplied (spoofed) sessionId.
   const preTool = await runHook({
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__humans__notify",
+    tool_name: "mcp__hmux__notify",
     tool_input: { message: "hi", sessionId: "spoofed-session" }
   })
   expect(preTool.exitCode).toBe(0)
@@ -334,7 +334,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
   expect(reOut.hookSpecificOutput.hookEventName).toBe("PostToolUse")
-  expect(reOut.hookSpecificOutput.additionalContext).toContain("mcp__humans__ask")
+  expect(reOut.hookSpecificOutput.additionalContext).toContain("mcp__hmux__ask")
   const postAgain = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
   expect(postAgain.stdout).toBe("")
 
@@ -396,7 +396,7 @@ test("a declared signal shapes the Stop status and survives the idle notificatio
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__humans__signal",
+    tool_name: "mcp__hmux__signal",
     tool_input: { status: "question" }
   })
   expect(pre.exitCode).toBe(0)
@@ -426,13 +426,13 @@ test("a declared signal shapes the Stop status and survives the idle notificatio
   expect(plain.status).toBe("idle")
   expect(plain.detail).toBeUndefined()
 
-  // signal(done) → Stop maps to idle (the distinction lives in the mux plane).
+  // signal(done) → Stop maps to idle (the distinction lives in the hmux plane).
   await runHook({ session_id: id, cwd, hook_event_name: "UserPromptSubmit", prompt: "go" })
   await runHook({
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__humans__signal",
+    tool_name: "mcp__hmux__signal",
     tool_input: { status: "done" }
   })
   await runHook({ session_id: id, cwd, hook_event_name: "Stop" })
@@ -444,7 +444,7 @@ test("a declared signal shapes the Stop status and survives the idle notificatio
 test("hook script is silent and exits 0 when the server is down", async () => {
   const result = await runHook(
     { session_id: "down-1", cwd: "/tmp", hook_event_name: "SessionStart" },
-    { HUMANS_URL: "http://localhost:1" }
+    { HMUX_URL: "http://localhost:1" }
   )
   expect(result.exitCode).toBe(0)
   expect(result.stdout).toBe("")

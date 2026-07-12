@@ -13,8 +13,8 @@ const ANSWER_AFTER_MS = 6.5 * 60_000
 soakTest(
   "ask blocked 6.5 minutes resolves with late answer",
   async () => {
-    process.env.HUMANS_PORT = String(PORT)
-    process.env.HUMANS_DB = `/tmp/humans-soak-${Date.now()}.db`
+    process.env.HMUX_PORT = String(PORT)
+    process.env.HMUX_DB = `/tmp/hmux-soak-${Date.now()}.db`
     await import("../src/index")
 
     const client = new Client({ name: "soak", version: "0.0.0" })

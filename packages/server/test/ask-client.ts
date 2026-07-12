@@ -3,7 +3,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 
-const port = Number(process.env.HUMANS_PORT ?? 7373)
+const port = Number(process.env.HMUX_PORT ?? 7373)
 const [question = "Test question?", agent = "test-agent", project] = process.argv.slice(2)
 
 const client = new Client({ name: "ask-client", version: "0.0.0" })

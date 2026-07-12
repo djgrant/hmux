@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite"
 import { Context, Effect, Layer } from "effect"
-import type { Message, Session, SessionStatus } from "@humans/protocol"
+import type { Message, Session, SessionStatus } from "@hmux/protocol"
 
 interface MessageRow {
   id: string
@@ -58,7 +58,7 @@ const rowToSession = (row: SessionRow): Session => ({
   ...(row.ended_at !== null ? { endedAt: row.ended_at } : {})
 })
 
-export class Store extends Context.Tag("@humans/server/Store")<
+export class Store extends Context.Tag("@hmux/server/Store")<
   Store,
   {
     readonly create: (message: Message) => Effect.Effect<Message>
@@ -102,7 +102,7 @@ export class Store extends Context.Tag("@humans/server/Store")<
     ) => Effect.Effect<void>
     /**
      * Bumps last_seen for a session by id and returns it (undefined when
-     * unknown). Used by MCP tool calls carrying an x-humans-session header.
+     * unknown). Used by MCP tool calls carrying an x-hmux-session header.
      */
     readonly touchSession: (id: string) => Effect.Effect<Session | undefined>
     readonly setSessionBound: (
@@ -115,7 +115,7 @@ export class Store extends Context.Tag("@humans/server/Store")<
 >() {}
 
 export const StoreLive = Layer.sync(Store, () => {
-  const db = new Database(process.env.HUMANS_DB ?? "humans.db", { create: true })
+  const db = new Database(process.env.HMUX_DB ?? "hmux.db", { create: true })
   db.run(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
