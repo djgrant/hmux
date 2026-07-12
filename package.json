@@ -23,6 +23,7 @@
     "bumpp": "^10.3.2",
     "bun-types": "latest",
     "pokit": "0.3.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "^4.4.3"
   }
 }
