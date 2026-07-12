@@ -21,10 +21,4 @@ claude --plugin-dir /path/to/hmux/packages/cc-plugin
 
 Claude Code's hooks run one script that talks plain HTTP to the hmux server. Sessions register on start, turn `busy` while working, surface a `message` when the agent needs or has left you something, and rest at `idle` otherwise. The plugin also declares the hmux MCP server, so the `ask` / `notify` / `signal` tools are available whenever it is enabled.
 
-For headless (`-p`) runs, `hmux-run` routes permission prompts to your inbox:
-
-```sh
-hmux-run "run the release script" --agent release-bot
-```
-
 See the [repo README](../..) for the wider picture.

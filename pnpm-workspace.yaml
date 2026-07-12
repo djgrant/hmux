@@ -4,7 +4,6 @@ minimumReleaseAgeExclude:
   # Our own packages are dogfooded from the registry; never gate them by release age.
   - '@djgrant/hmux'
   - 'terminal-focus'
-  - 'hmux-cc-plugin'
   - '@hmux/*'
   - '@pokit/core@0.6.0'
   - '@pokit/terminal@0.6.0'

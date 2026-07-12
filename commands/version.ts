@@ -12,12 +12,12 @@ import { z } from 'zod';
 import { defineCommand } from '@pokit/core';
 import { versionBump } from 'bumpp';
 
-// The npm-published packages. Private packages (@hmux/protocol, @hmux/server,
-// @hmux/mailbox) are bundled or unpublished, so they are not versioned here.
+// The npm-published packages. The rest are private: @hmux/protocol, @hmux/server
+// and @hmux/mailbox are bundled or unpublished, and hmux-cc-plugin ships via the
+// GitHub plugin marketplace rather than npm.
 const PUBLISHABLE_FILES = [
   'packages/hmux/package.json',
   'packages/focus/package.json',
-  'packages/cc-plugin/package.json',
 ];
 
 export const command = defineCommand({

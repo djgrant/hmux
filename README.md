@@ -52,7 +52,7 @@ pok typecheck   # typecheck all packages
 
 ### Releasing
 
-`@djgrant/hmux`, `terminal-focus`, and `hmux-cc-plugin` are published to npm; `@hmux/protocol`, `@hmux/server`, and `@hmux/mailbox` stay private.
+`@djgrant/hmux` and `terminal-focus` are published to npm. The rest stay off npm: `hmux-cc-plugin` ships via the GitHub plugin marketplace, and `@hmux/protocol`, `@hmux/server`, and `@hmux/mailbox` are bundled or private.
 
 ```sh
 pok version     # bumpp: bump the publishable packages, commit, tag v<x.y.z>, push
