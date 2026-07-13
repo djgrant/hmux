@@ -1,6 +1,6 @@
 {
   "name": "terminal-focus",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Focus the terminal window that owns a given tty",
   "type": "module",
   "license": "MIT",
