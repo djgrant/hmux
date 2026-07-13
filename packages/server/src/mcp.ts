@@ -68,8 +68,8 @@ const startKeepAlive = (
 }
 
 /**
- * Caller identity carried on the /mcp request as headers (the hmux-run
- * wrapper and other integrations set them via mcp-config):
+ * Caller identity carried on the /mcp request as headers (integrations set
+ * them via mcp-config):
  *
  *   x-hmux-agent    default agent name
  *   x-hmux-project  default project
@@ -216,7 +216,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
     },
     async ({ tool_name, input, tool_use_id: _toolUseId, agent, project, sessionId }, extra) => {
       // Claude Code calls this tool itself with only tool_name/input/
-      // tool_use_id — identity comes from the request headers (hmux-run).
+      // tool_use_id — identity comes from the request headers.
       const resolved = await resolveIdentity(sessionId)
       const { agent: effectiveAgent, project: effectiveProject } =
         effectiveIdentity(resolved, agent, project)
