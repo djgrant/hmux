@@ -21,6 +21,29 @@ if (process.argv[2] === "advertise") {
   process.exit(0)
 }
 
+if (process.argv[2] === "wait") {
+  const { parseWaitArgs, waitForSettle } = await import("./wait")
+  const args = parseWaitArgs(process.argv.slice(3))
+  if (!args) {
+    console.error("usage: hmux wait <target> [--timeout <seconds>]")
+    process.exit(2)
+  }
+  const { findWindow } = await import("./backend")
+  const { TmuxBackend } = await import("./tmux")
+  const backend = new TmuxBackend(false)
+  await backend.ensure()
+  const result = await waitForSettle(
+    async () => findWindow(await backend.list(), args.target)?.status,
+    { timeoutMs: args.timeoutMs },
+  )
+  if (result.outcome === "settled") {
+    console.log(result.status ?? "none")
+    process.exit(0)
+  }
+  console.log(result.outcome) // "timeout" | "gone"
+  process.exit(result.outcome === "timeout" ? 3 : 1)
+}
+
 if (process.argv[2] === "mcp") {
   const { serve } = await import("./mcp")
   await serve() // resolves when the client closes stdin

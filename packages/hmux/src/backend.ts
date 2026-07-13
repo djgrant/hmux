@@ -106,6 +106,16 @@ export interface Backend {
   kill(target: string): Promise<void>
 }
 
+/** Find a window by its target ("session:index"), or a session's first window. */
+export function findWindow(groups: SessionGroup[], target: string): WindowEntry | undefined {
+  for (const group of groups) {
+    if (group.target === target) return group.windows[0]
+    const window = group.windows.find((w) => w.target === target)
+    if (window) return window
+  }
+  return undefined
+}
+
 /** error beats message beats busy beats idle/unadvertised. */
 const PRIORITY: Record<string, number> = { error: 3, message: 2, busy: 1, idle: 0 }
 

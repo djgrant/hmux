@@ -15,21 +15,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
-import type { Backend, SessionGroup, WindowEntry } from "./backend"
+import { findWindow, type Backend } from "./backend"
 import { readTranscript, transcriptFromResume } from "./transcript"
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] })
 const json = (value: unknown) => text(JSON.stringify(value, null, 2))
-
-/** Find a window by its target ("session:index"), or a session's first window. */
-function findWindow(groups: SessionGroup[], target: string): WindowEntry | undefined {
-  for (const group of groups) {
-    if (group.target === target) return group.windows[0]
-    const window = group.windows.find((w) => w.target === target)
-    if (window) return window
-  }
-  return undefined
-}
 
 export function buildServer(backend: Backend): McpServer {
   const server = new McpServer({ name: "hmux", version: "0.0.0" })
@@ -122,7 +112,11 @@ export function buildServer(backend: Backend): McpServer {
       const window = findWindow(await backend.list(), target)
       if (!window) return text(`No window matches '${target}' — check list.`)
       await backend.send(window.paneId, message)
-      return text(`Sent to ${target} (${window.agent ?? "no advertised agent"}).`)
+      return text(
+        `Sent to ${target} (${window.agent ?? "no advertised agent"}). ` +
+          `If you need its reply, \`hmux wait ${target}\` in a background shell exits ` +
+          "when the agent settles; then read.",
+      )
     },
   )
 
