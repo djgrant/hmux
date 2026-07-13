@@ -1,0 +1,37 @@
+{
+  "name": "hmux-pi-plugin",
+  "version": "0.1.0",
+  "description": "pi extension: registers pi sessions with a local hmux server for live presence, and registers the ask/notify/signal human-in-the-loop tools. Distributed as a pi package via git, not npm.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djgrant/hmux.git",
+    "directory": "packages/pi-plugin"
+  },
+  "homepage": "https://github.com/djgrant/hmux#readme",
+  "bugs": {
+    "url": "https://github.com/djgrant/hmux/issues"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1"
+  }
+}
