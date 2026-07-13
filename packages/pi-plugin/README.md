@@ -10,6 +10,8 @@ Requires an hmux server on `http://localhost:7373` (set `HMUX_URL` to override).
 pi install git:github.com/djgrant/hmux
 ```
 
+The repo root carries a `pi` manifest pointing here, so installing the monorepo installs this extension (pi treats a git repo's root as the package). Its one runtime dependency, `@modelcontextprotocol/sdk`, is declared at the root so pi's production install resolves it.
+
 Or, for local development, load it straight from a checkout:
 
 ```sh
