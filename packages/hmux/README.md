@@ -31,6 +31,36 @@ hmux advertise --status busy
 hmux advertise --clear
 ```
 
-`--status` is one word (`message`, `busy`, `error`, `idle`); `--detail` is optional one-line context.
+`--status` is one word (`message`, `busy`, `error`, `idle`); `--detail` is optional one-line context. `--agent`, `--resume` and `--transcript` describe the pane's occupant: its identity, the command that brings it back after a restore, and the path to its conversation transcript (read by the control MCP below, never by the picker).
 
 Claude Code advertises automatically via [hmux-cc-plugin](../cc-plugin). See the [repo README](../..) for the wider picture.
+
+## MCP
+
+hmux exposes two MCP servers with distinct jobs.
+
+### hmux-signals (HTTP)
+
+For agents running **inside** hmux sessions: ask you a question, request approval, send a notification. You never start it — every hmux entrypoint spawns it if nothing answers on the port (default `:7373`, override with `HMUX_URL`; logs in `~/.hmux/server.log`). Register it in your agents' MCP config:
+
+```json
+{ "hmux-signals": { "type": "http", "url": "http://localhost:7373/mcp" } }
+```
+
+### hmux-control (stdio)
+
+For **one** overseer agent — a chief of staff that reads each session's conversation and dispatches your decisions into them. The MCP client spawns it per session; there is nothing to daemonise. Register it only in the overseer's config — worker agents have no business reading other sessions or typing into their prompts:
+
+```json
+{ "hmux-control": { "command": "hmux", "args": ["mcp"] } }
+```
+
+Five tools:
+
+- `list` — the map: sessions, windows, agents, advertised status, transcript availability.
+- `read` — a window's recent conversation, from its advertised transcript (tool results elided by default). hmux never inspects the pane itself, so a window with no advertised transcript is opaque. Sessions advertised before `--transcript` existed fall back to the resume command's session id.
+- `send` — paste a message into the agent's prompt and submit it, exactly as if you had typed it there. The reply lands in that session; `read` picks it up.
+- `open` — load a session into your parked display target (`hmux target`), for when you want eyes on it yourself.
+- `create` — new session or `session/window`; dispatching new work is a `create` followed by a `send`.
+
+There is deliberately no `kill` and no advertise write path: the surface briefs and dispatches, it does not reap, and it cannot forge another agent's advertised state.

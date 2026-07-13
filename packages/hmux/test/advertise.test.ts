@@ -13,12 +13,15 @@ describe("parseAdvertiseArgs", () => {
     })
   })
 
-  test("agent and resume pass through without touching status", () => {
+  test("agent, resume and transcript pass through without touching status", () => {
     expect(parseAdvertiseArgs(["--resume", "claude --resume abc"])).toEqual({
       resume: "claude --resume abc",
     })
     expect(parseAdvertiseArgs(["--agent", "api-3f2c · sonnet"])).toEqual({
       agent: "api-3f2c · sonnet",
+    })
+    expect(parseAdvertiseArgs(["--transcript", "/tmp/abc.jsonl"])).toEqual({
+      transcript: "/tmp/abc.jsonl",
     })
   })
 
@@ -28,6 +31,7 @@ describe("parseAdvertiseArgs", () => {
       detail: null,
       agent: null,
       resume: null,
+      transcript: null,
     })
   })
 

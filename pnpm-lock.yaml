@@ -36,6 +36,9 @@ importers:
 
   packages/hmux:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
       '@opentui/core':
         specifier: ^0.4.3
         version: 0.4.3(typescript@5.9.3)(web-tree-sitter@0.25.10)
@@ -48,6 +51,9 @@ importers:
       terminal-focus:
         specifier: workspace:*
         version: link:../focus
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/mailbox:
     dependencies:

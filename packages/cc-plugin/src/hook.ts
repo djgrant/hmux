@@ -103,6 +103,8 @@ interface HookInput {
   /** PreToolUse events: the tool being called and its input. */
   tool_name?: unknown
   tool_input?: unknown
+  /** Path to this session's conversation transcript (jsonl). */
+  transcript_path?: unknown
 }
 
 interface SessionInfo {
@@ -119,14 +121,16 @@ interface SessionInfo {
  * left the human something; detail says what) > busy > idle. An unsignalled
  * finished turn is idle — only declared states claim attention. A resume
  * command, advertised at session start, lets hmux relaunch this session when
- * it restores after a reboot. Failure-silent like everything else, including
- * when hmux is not installed.
+ * it restores after a reboot. The transcript path, advertised alongside it,
+ * lets hmux's MCP surface read this session's conversation. Failure-silent
+ * like everything else, including when hmux is not installed.
  */
 const advertise = (
   status: string | null,
   detail?: string,
   agent?: string | null,
   resume?: string,
+  transcript?: string,
 ) => {
   const args =
     status === null
@@ -136,6 +140,7 @@ const advertise = (
           ...(detail !== undefined ? ["--detail", detail] : []),
           ...(agent !== undefined && agent !== null ? ["--agent", agent] : []),
           ...(resume !== undefined ? ["--resume", resume] : []),
+          ...(transcript !== undefined ? ["--transcript", transcript] : []),
         ]
   try {
     Bun.spawnSync(["hmux", "advertise", ...args], { stdout: "ignore", stderr: "ignore" })
@@ -235,6 +240,7 @@ const main = async () => {
         undefined,
         [`${dirname ?? "claude"}-${id.slice(0, 4)}`, model].filter(Boolean).join(" · "),
         `claude --resume ${id}`,
+        typeof input.transcript_path === "string" ? input.transcript_path : undefined,
       )
       await post("/sessions/register", {
         id,

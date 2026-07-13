@@ -19,6 +19,10 @@ export interface WindowEntry {
   /** Currently selected window within its session. */
   active: boolean
   paneCount: number
+  /** Pane to address with send(): the agent's pane when one advertised, else the active pane. */
+  paneId: string
+  /** Advertised conversation transcript path (e.g. a cc session jsonl). */
+  transcript: string | null
   /** Advertised state rolled up from the window's panes. */
   status: Status | null
   detail: string | null
@@ -90,6 +94,12 @@ export interface Backend {
    */
   saveSelection(target: string): Promise<void>
   loadSelection(): Promise<string | null>
+  /**
+   * Paste a message into a pane's prompt and submit it, exactly as if the
+   * user had typed it. The pane's occupant replies in its own session; mux
+   * itself holds no conversation state.
+   */
+  send(paneId: string, message: string): Promise<void>
   /** Rename a session ("name") or a window ("name:index"). */
   rename(target: string, to: string): Promise<void>
   /** Kill a session ("name") or a single window ("name:index"). */

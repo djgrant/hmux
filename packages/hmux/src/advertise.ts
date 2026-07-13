@@ -6,8 +6,8 @@
  * the pane.
  *
  * Field semantics: a string sets, null unsets, undefined leaves untouched.
- * status and detail travel as one unit (detail annotates status); agent and
- * resume persist until explicitly changed.
+ * status and detail travel as one unit (detail annotates status); agent,
+ * resume and transcript persist until explicitly changed.
  */
 
 export interface AdvertiseFields {
@@ -19,6 +19,8 @@ export interface AdvertiseFields {
   agent?: string | null
   /** Command that brings the pane's occupant back after a restore. */
   resume?: string | null
+  /** Path to the occupant's conversation transcript (e.g. a cc session jsonl). */
+  transcript?: string | null
 }
 
 const OPTIONS: Record<keyof AdvertiseFields, string> = {
@@ -26,6 +28,7 @@ const OPTIONS: Record<keyof AdvertiseFields, string> = {
   detail: "@hmux_detail",
   agent: "@hmux_agent",
   resume: "@hmux_resume",
+  transcript: "@hmux_transcript",
 }
 
 /** Write the given fields onto the calling pane. No-op outside a pane. */
@@ -53,7 +56,7 @@ export function advertise(fields: AdvertiseFields): void {
  */
 export function parseAdvertiseArgs(argv: string[]): AdvertiseFields | null {
   if (argv[0] === "--clear" && argv.length === 1)
-    return { status: null, detail: null, agent: null, resume: null }
+    return { status: null, detail: null, agent: null, resume: null, transcript: null }
   const fields: AdvertiseFields = {}
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]
@@ -63,6 +66,7 @@ export function parseAdvertiseArgs(argv: string[]): AdvertiseFields | null {
     else if (flag === "--detail") fields.detail = value
     else if (flag === "--agent") fields.agent = value
     else if (flag === "--resume") fields.resume = value
+    else if (flag === "--transcript") fields.transcript = value
     else return null
   }
   if (Object.keys(fields).length === 0) return null

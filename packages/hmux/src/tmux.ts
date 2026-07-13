@@ -12,7 +12,7 @@ import { HOLD_SESSION, registeredTargets } from "./targets"
 
 const SEP = "\x1f" // unit separator: can't appear in names/paths
 
-async function tmux(args: string[]): Promise<string> {
+export async function tmux(args: string[]): Promise<string> {
   const proc = Bun.spawn(["tmux", ...args], { stdout: "pipe", stderr: "pipe" })
   const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
   if (code !== 0) throw new Error(`tmux ${args[0]} exited ${code}`)
@@ -35,10 +35,12 @@ interface PaneRow {
   windowName: string
   windowActive: boolean
   paneActive: boolean
+  paneId: string
   currentPath: string
   agent: string | null
   status: string | null
   detail: string | null
+  transcript: string | null
 }
 
 /**
@@ -225,11 +227,11 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_id}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}${SEP}#{@hmux_transcript}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, windowActive, paneActive, currentPath, agent, status, detail] =
+        const [session, windowIndex, windowName, windowActive, paneActive, paneId, currentPath, agent, status, detail, transcript] =
           line.split(SEP)
         const rows = panesBySession.get(session) ?? []
         rows.push({
@@ -238,10 +240,12 @@ export class TmuxBackend implements Backend {
           windowName: sanitize(windowName),
           windowActive: windowActive === "1",
           paneActive: paneActive === "1",
+          paneId,
           currentPath,
           agent: agent ? sanitize(agent) : null,
           status: status ? sanitize(status) : null,
           detail: detail ? sanitize(detail) : null,
+          transcript: transcript ? sanitize(transcript) : null,
         })
         panesBySession.set(session, rows)
       }
@@ -266,15 +270,19 @@ export class TmuxBackend implements Backend {
         const active = wPanes.find((p) => p.paneActive) ?? wPanes[0]
         // Agent identity from whichever pane advertised one — a cc session
         // is usually not the active pane while you look at the dashboard.
-        const agent = wPanes.find((p) => p.agent)?.agent ?? null
+        // paneId and transcript follow the same pane: send/read address the
+        // agent's pane, not wherever the cursor happens to be.
+        const agentPane = wPanes.find((p) => p.agent || p.transcript)
         windows.push({
           target: `${name}:${index}`,
           session: name,
           name: active.windowName,
           dir: tilde(active.currentPath),
-          agent,
+          agent: agentPane?.agent ?? null,
           active: active.windowActive,
           paneCount: wPanes.length,
+          paneId: (agentPane ?? active).paneId,
+          transcript: agentPane?.transcript ?? null,
           ...topStatus(wPanes),
         })
       }
@@ -413,6 +421,22 @@ export class TmuxBackend implements Backend {
       await tmux(["new-window", "-t", `=${session}:`, "-n", window, "-c", dir, "-P", "-F", "#{window_index}"])
     ).trim()
     return `${session}:${index}`
+  }
+
+  async send(target: string, message: string): Promise<void> {
+    // Buffer paste instead of send-keys: send-keys mangles multiline text
+    // and bypasses bracketed paste, which TUIs rely on to keep a pasted
+    // message as one prompt entry. The delay before Enter lets the paste
+    // settle before submission.
+    const proc = Bun.spawn(["tmux", "load-buffer", "-b", "hmux-send", "-"], {
+      stdin: new TextEncoder().encode(message),
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+    if ((await proc.exited) !== 0) throw new Error("tmux load-buffer failed")
+    await tmux(["paste-buffer", "-d", "-b", "hmux-send", "-t", target])
+    await new Promise((r) => setTimeout(r, 150))
+    await tmux(["send-keys", "-t", target, "Enter"])
   }
 
   async rename(target: string, to: string): Promise<void> {

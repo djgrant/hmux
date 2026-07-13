@@ -21,6 +21,7 @@ const fakeBackend: Backend = {
   openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
   peekInClient: async (t, c) => void peeked.push([t, c.tty]),
   create: async (n) => (created.push(n), n),
+  send: async () => {},
   rename: async (t, to) => void renamed.push([t, to]),
   kill: async (s) => void killed.push(s),
   saveSelection: async (t) => void saved.push(t),
@@ -37,8 +38,8 @@ function seed() {
       status: "message",
       detail: "approve the plan?",
       windows: [
-        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, paneCount: 2, status: "message", detail: "approve the plan?" },
-        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, active: false, paneCount: 1, status: "busy", detail: null },
+        { target: "api:1", session: "api", name: "claude", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, paneCount: 2, paneId: "%0", transcript: null, status: "message", detail: "approve the plan?" },
+        { target: "api:2", session: "api", name: "server", dir: "~/Repos/api", agent: null, active: false, paneCount: 1, paneId: "%0", transcript: null, status: "busy", detail: null },
       ],
     },
     {
@@ -48,7 +49,7 @@ function seed() {
       attached: false,
       status: null,
       detail: null,
-      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, active: true, paneCount: 1, status: null, detail: null }],
+      windows: [{ target: "web:1", session: "web", name: "zsh", dir: "~/Repos/web", agent: null, active: true, paneCount: 1, paneId: "%0", transcript: null, status: null, detail: null }],
     },
   ])
   updateQuery("")
@@ -157,7 +158,7 @@ test("prompt overlay: ^n creates, ^r renames", async () => {
 
 test("parked cursor follows the attached session's active window", async () => {
   const w = (target: string, name: string, active: boolean) => ({
-    target, session: "api", name, dir: "~/Repos/api", agent: null, active, paneCount: 1, status: null, detail: null,
+    target, session: "api", name, dir: "~/Repos/api", agent: null, active, paneCount: 1, paneId: "%0", transcript: null, status: null, detail: null,
   })
   const group = (activeIndex: 1 | 2): SessionGroup[] => [{
     target: "api", name: "api", dir: "~/Repos/api", attached: true, status: null, detail: null,
@@ -191,11 +192,11 @@ test("left/right jump to sessions with an advertised agent, skipping bare shells
   // web (busy) · shell (unadvertised, skipped) · ops (error).
   setGroups([
     { target: "web", name: "web", dir: "~", attached: false, status: "busy", detail: null,
-      windows: [{ target: "web:1", session: "web", name: "claude", dir: "~", agent: null, active: true, paneCount: 1, status: "busy", detail: null }] },
+      windows: [{ target: "web:1", session: "web", name: "claude", dir: "~", agent: null, active: true, paneCount: 1, paneId: "%0", transcript: null, status: "busy", detail: null }] },
     { target: "shell", name: "shell", dir: "~", attached: false, status: null, detail: null,
-      windows: [{ target: "shell:1", session: "shell", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: null, detail: null }] },
+      windows: [{ target: "shell:1", session: "shell", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, paneId: "%0", transcript: null, status: null, detail: null }] },
     { target: "ops", name: "ops", dir: "~", attached: false, status: "error", detail: null,
-      windows: [{ target: "ops:1", session: "ops", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, status: "error", detail: null }] },
+      windows: [{ target: "ops:1", session: "ops", name: "zsh", dir: "~", agent: null, active: true, paneCount: 1, paneId: "%0", transcript: null, status: "error", detail: null }] },
   ])
   updateQuery("")
   setSelected(0)
