@@ -1,9 +1,22 @@
 /**
- * Reader for advertised conversation transcripts — Claude Code session
- * jsonl files. This is the MCP surface's read path: the CoS agent reads
- * what a session's agent and human actually said, rather than scraping
- * the pane it renders in. Pure functions; the caller supplies the path
- * (advertised as @hmux_transcript, or derived from @hmux_resume).
+ * Reader for advertised conversation transcripts. This is the MCP surface's
+ * read path: the CoS agent reads what a session's agent and human actually
+ * said, rather than scraping the pane it renders in. Pure functions; the
+ * caller supplies the path (advertised as @hmux_transcript, or derived from
+ * @hmux_resume).
+ *
+ * Two harness schemas are understood, auto-detected per line so a single
+ * reader serves either:
+ *
+ *   Claude Code — entry.type is "user" | "assistant"; message.content blocks
+ *     are text | thinking | tool_use (name) | tool_result (nested content).
+ *   pi          — entry.type is "message"; role lives in message.role
+ *     (user | assistant | toolResult | …); assistant tool calls are "toolCall"
+ *     blocks (name), and a tool result is its OWN entry (role "toolResult",
+ *     message.toolName), not a block nested in a user turn.
+ *
+ * Both carry an ISO `timestamp` at the entry level and text as { type:"text",
+ * text } blocks, so those paths are shared.
  */
 
 export interface TranscriptTurn {
@@ -36,7 +49,12 @@ interface ContentBlock {
 interface Entry {
   type?: string
   timestamp?: string
-  message?: { role?: string; content?: string | ContentBlock[] }
+  message?: {
+    role?: string
+    content?: string | ContentBlock[]
+    /** pi toolResult entries name the resolved tool at the message level. */
+    toolName?: string
+  }
 }
 
 function blockText(block: ContentBlock, includeToolResults: boolean): string {
@@ -54,7 +72,30 @@ function blockText(block: ContentBlock, includeToolResults: boolean): string {
 
 function toTurn(entry: Entry, includeToolResults: boolean): TranscriptTurn | null {
   const message = entry.message
-  if (!message || (entry.type !== "user" && entry.type !== "assistant")) return null
+  // Conversational entries only: CC "user"/"assistant" or pi "message". Both
+  // put the role on message.role; every other entry type (mode changes,
+  // snapshots, model_change, custom, branch/compaction summaries) is plumbing.
+  if (!message) return null
+  if (entry.type !== "user" && entry.type !== "assistant" && entry.type !== "message") return null
+
+  // pi tool results are standalone entries (role "toolResult"), the analogue
+  // of CC's user turn that carries only a tool_result block. Elide by default;
+  // when asked for, surface as a user turn labelled with the resolved tool.
+  if (message.role === "toolResult") {
+    if (!includeToolResults) return null
+    const text = Array.isArray(message.content)
+      ? message.content
+          .map((b) => (b.type === "text" && typeof b.text === "string" ? b.text : ""))
+          .filter(Boolean)
+          .join("\n")
+      : typeof message.content === "string"
+        ? message.content
+        : ""
+    const tools = typeof message.toolName === "string" ? [message.toolName] : []
+    if (text === "" && tools.length === 0) return null
+    return { role: "user", text, tools, timestamp: entry.timestamp ?? null }
+  }
+
   const role = message.role === "user" ? "user" : message.role === "assistant" ? "assistant" : null
   if (!role) return null
 
@@ -67,8 +108,9 @@ function toTurn(entry: Entry, includeToolResults: boolean): TranscriptTurn | nul
     .map((b) => blockText(b, includeToolResults))
     .filter(Boolean)
     .join("\n")
+  // Tool invocations: CC names them "tool_use", pi names them "toolCall".
   const tools = content
-    .filter((b) => b.type === "tool_use" && typeof b.name === "string")
+    .filter((b) => (b.type === "tool_use" || b.type === "toolCall") && typeof b.name === "string")
     .map((b) => b.name as string)
   const isToolResultOnly = content.every((b) => b.type === "tool_result" || b.type === "thinking")
   // A user entry that only carries tool results is harness plumbing, not the
@@ -104,16 +146,32 @@ export async function readTranscript(
 }
 
 /**
- * Fallback for panes advertised before the transcript field existed: pull
- * the session id out of the resume command ("claude --resume <id>") and
- * find its jsonl under ~/.claude/projects. Returns null when the resume
- * carries no id or no file matches.
+ * Fallback for panes advertised before the transcript field existed: pull the
+ * session id out of the resume command and find its jsonl. Both harnesses are
+ * recognised:
+ *
+ *   claude --resume <id>  -> ~/.claude/projects/<project>/<id>.jsonl
+ *   pi --session <id>     -> ~/.pi/agent/sessions/<project>/<ts>_<id>.jsonl
+ *
+ * Returns null when the resume carries no id or no file matches.
  */
 export async function transcriptFromResume(resume: string): Promise<string | null> {
-  const match = resume.match(/--resume\s+([\w-]+)/)
-  if (!match) return null
-  const glob = new Bun.Glob(`*/${match[1]}.jsonl`)
-  const root = `${process.env.HOME}/.claude/projects`
-  for await (const file of glob.scan({ cwd: root, absolute: true })) return file
+  const home = process.env.HOME
+
+  const ccMatch = resume.match(/--resume\s+([\w-]+)/)
+  if (ccMatch) {
+    const glob = new Bun.Glob(`*/${ccMatch[1]}.jsonl`)
+    for await (const file of glob.scan({ cwd: `${home}/.claude/projects`, absolute: true }))
+      return file
+  }
+
+  // pi filenames are "<timestamp>_<uuid>.jsonl", so match the id as a suffix.
+  const piMatch = resume.match(/--session\s+([\w-]+)/)
+  if (piMatch) {
+    const glob = new Bun.Glob(`*/*${piMatch[1]}.jsonl`)
+    for await (const file of glob.scan({ cwd: `${home}/.pi/agent/sessions`, absolute: true }))
+      return file
+  }
+
   return null
 }
