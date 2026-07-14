@@ -237,9 +237,12 @@ export function App(props: {
                   flexShrink={0}
                   backgroundColor={isSelected() ? HIGHLIGHT_BG : undefined}
                   paddingLeft={1}
-                  onMouseDown={() => {
+                  onMouseDown={(e) => {
                     setSelected(i())
-                    open(row.target)
+                    // Held option turns a click into a peek — the display
+                    // follows the click while focus stays here (as with ⌥↑↓).
+                    if (e.modifiers.alt) peek(row.target)
+                    else open(row.target)
                   }}
                 >
                   <text wrapMode="none" truncate fg={isSelected() ? BRIGHT : row.kind === "session" ? BODY : DIM}>
