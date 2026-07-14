@@ -15,7 +15,10 @@
  *                       + GET /sessions/:id; if bound and not yet injected
  *                       this session (marker file), emit additionalContext
  *   Stop             -> promotes a declared signal (question -> needs-attention,
- *                       done -> idle "done"), else {status: "idle"}
+ *                       done -> idle "done"), else {status: "idle"}. A stop that
+ *                       belongs to a Task sub-agent (SubagentStop, or a Stop
+ *                       carrying a sub-agent identity) leaves the parent busy —
+ *                       the main turn is still in flight.
  *   Notification     -> POST /sessions/:id/status — "needs-attention" only
  *                       for permission prompts; the idle "waiting for your
  *                       input" notification maps to "idle"; others no-op
@@ -105,7 +108,27 @@ interface HookInput {
   tool_input?: unknown
   /** Path to this session's conversation transcript (jsonl). */
   transcript_path?: unknown
+  /**
+   * Set only when the event fires inside a Task sub-agent call — the session_id
+   * stays the parent's, but these identify the sub-agent. Their presence is how
+   * we tell a sub-agent's activity apart from the main agent's.
+   */
+  agent_id?: unknown
+  agent_type?: unknown
+  subagent_type?: unknown
 }
+
+/**
+ * True when this hook fired inside a Task sub-agent, not the main agent. A
+ * sub-agent runs mid-turn under the parent's session_id, so its lifecycle
+ * events must NOT relax the parent pane's status — the human is still owed the
+ * parent's turn. Claude Code marks such events with a sub-agent identity
+ * (agent_id / agent_type / subagent_type); the main agent carries none.
+ */
+const isSubagentEvent = (input: HookInput): boolean =>
+  [input.agent_id, input.agent_type, input.subagent_type].some(
+    (v) => typeof v === "string" && v.length > 0,
+  )
 
 interface SessionInfo {
   bound?: boolean
@@ -310,6 +333,10 @@ const main = async () => {
       // Heartbeat: the agent just used a tool, so it is alive and working.
       advertise("busy")
       await post(`/sessions/${encoded}/status`, { status: "working" })
+      // A sub-agent's tool call heartbeats the parent (kept it busy above) but
+      // must not pull the human-inbox workflow context into the sub-agent's
+      // conversation — that's the main agent's contract, not the sub-agent's.
+      if (isSubagentEvent(input)) return
       // Mid-task bind: if the human bound this session after the prompt was
       // submitted, inject the bound context here — once (marker-guarded),
       // not on every tool call. Unbind clears the marker so a re-bind
@@ -332,7 +359,24 @@ const main = async () => {
       )
       return
     }
+    case "SubagentStop": {
+      // A sub-agent finished, but the parent turn has NOT ended — the main
+      // agent is still working with the sub-agent's result. Reassert busy so
+      // the pane stays amber rather than reading as "the agent is at rest".
+      advertise("busy")
+      await post(`/sessions/${encoded}/status`, { status: "working" })
+      return
+    }
     case "Stop": {
+      // Claude Code converts a Stop hook to SubagentStop for sub-agents, but be
+      // defensive across versions: if this Stop actually belongs to a sub-agent
+      // (parent session_id, sub-agent identity attached), the parent is still
+      // working — keep it busy instead of idling the pane to blue.
+      if (isSubagentEvent(input)) {
+        advertise("busy")
+        await post(`/sessions/${encoded}/status`, { status: "working" })
+        return
+      }
       // A declared signal (mcp__hmux__signal) ends the turn as a message —
       // the agent left the human something, the detail says what. An
       // unsignalled stop honestly doesn't know whether the human is needed,
