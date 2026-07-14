@@ -11,11 +11,15 @@
   "bugs": {
     "url": "https://github.com/djgrant/hmux/issues"
   },
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "packageManager": "pnpm@11.6.0",
   "//pi": "Lets `pi install git:github.com/djgrant/hmux` load the pi extension. pi treats the repo root as the package, so the manifest and the extension's runtime deps live here even though the source is under packages/pi-plugin. These are runtime deps (not dev) so pi's `npm install --omit=dev` installs them into the clone's root node_modules, where the extension resolves them by walking up. typebox is also bundled by pi at runtime, but declaring it here removes any reliance on that; @earendil-works/pi-coding-agent is a type-only import (erased), so it is not needed at runtime.",
   "pi": {
-    "extensions": ["packages/pi-plugin/src/index.ts"]
+    "extensions": [
+      "packages/pi-plugin/src/index.ts"
+    ]
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -30,7 +34,7 @@
     "@pokit/core": "0.6.0",
     "@pokit/terminal": "0.6.0",
     "bun-types": "latest",
-    "pok-plugins": "file:../../pok-plugins",
+    "pok-plugins": "github:djgrant/pok-plugins",
     "pokit": "0.3.2",
     "typescript": "^5",
     "zod": "^4.4.3"
