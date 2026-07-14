@@ -15,7 +15,11 @@ export default defineConfig({
   plugins: [
     release({
       packages: {
-        files: ['packages/hmux/package.json', 'packages/focus/package.json'],
+        files: [
+          'packages/hmux/package.json',
+          'packages/focus/package.json',
+          'packages/cc-plugin/.claude-plugin/plugin.json',
+        ],
       },
     }),
   ],
