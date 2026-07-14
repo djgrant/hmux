@@ -1,5 +1,8 @@
 packages:
   - packages/*
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false
 minimumReleaseAgeExclude:
   # Our own packages are dogfooded from the registry; never gate them by release age.
   - '@djgrant/hmux'
