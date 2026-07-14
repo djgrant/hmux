@@ -199,7 +199,7 @@ const buildServer = (run: Runner, identity: McpIdentity = {}) => {
       title: "Ask the human to approve a tool use",
       description:
         "Permission-prompt tool for headless Claude Code sessions (pass " +
-        "--permission-prompt-tool mcp__hmux__approve). Sends the requested tool use to " +
+        "--permission-prompt-tool mcp__plugin_hmux_hmux__approve). Sends the requested tool use to " +
         "the human inbox and BLOCKS until they allow or deny it. Returns the " +
         "permission-result JSON Claude Code expects.",
       inputSchema: {

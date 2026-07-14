@@ -24,7 +24,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "mcp__hmux__.*",
+        "matcher": "mcp__plugin_hmux_hmux__.*",
         "hooks": [
           {
             "type": "command",

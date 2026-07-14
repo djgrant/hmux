@@ -280,8 +280,8 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
   expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit")
-  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__hmux__ask")
-  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__hmux__notify")
+  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__plugin_hmux_hmux__ask")
+  expect(output.hookSpecificOutput.additionalContext).toContain("mcp__plugin_hmux_hmux__notify")
 
   // PreToolUse on an hmux tool: the harness session id is stamped into the
   // tool input, overriding a model-supplied (spoofed) sessionId.
@@ -289,7 +289,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__hmux__notify",
+    tool_name: "mcp__plugin_hmux_hmux__notify",
     tool_input: { message: "hi", sessionId: "spoofed-session" }
   })
   expect(preTool.exitCode).toBe(0)
@@ -334,7 +334,7 @@ test("hook script drives the full lifecycle over stdin JSON", async () => {
     hookSpecificOutput: { hookEventName: string; additionalContext: string }
   }
   expect(reOut.hookSpecificOutput.hookEventName).toBe("PostToolUse")
-  expect(reOut.hookSpecificOutput.additionalContext).toContain("mcp__hmux__ask")
+  expect(reOut.hookSpecificOutput.additionalContext).toContain("mcp__plugin_hmux_hmux__ask")
   const postAgain = await runHook({ session_id: id, cwd, hook_event_name: "PostToolUse" })
   expect(postAgain.stdout).toBe("")
 
@@ -396,7 +396,7 @@ test("a declared signal shapes the Stop status and survives the idle notificatio
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__hmux__signal",
+    tool_name: "mcp__plugin_hmux_hmux__signal",
     tool_input: { status: "question" }
   })
   expect(pre.exitCode).toBe(0)
@@ -432,7 +432,7 @@ test("a declared signal shapes the Stop status and survives the idle notificatio
     session_id: id,
     cwd,
     hook_event_name: "PreToolUse",
-    tool_name: "mcp__hmux__signal",
+    tool_name: "mcp__plugin_hmux_hmux__signal",
     tool_input: { status: "done" }
   })
   await runHook({ session_id: id, cwd, hook_event_name: "Stop" })

@@ -3,7 +3,7 @@
  * hook_event_name from the stdin JSON:
  *
  *   SessionStart     -> POST /sessions/register   (project = cwd, agent = dirname/branch-<id prefix>)
- *   PreToolUse       -> mcp__hmux__* calls only: stamp the harness-provided
+ *   PreToolUse       -> hmux MCP calls only: stamp the harness-provided
  *                       session id into the tool input (updatedInput), making
  *                       message attribution harness-asserted, not model-asserted.
  *                       Also the hmux listening post: ask/approve advertise a
@@ -40,6 +40,13 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 const BASE = process.env.HMUX_URL ?? "http://localhost:7373"
+
+// Runtime tool-name prefix for the plugin-bundled hmux MCP server. Claude Code
+// scopes plugin MCP tools as mcp__plugin_<plugin-name>_<server-name>__<tool>;
+// both names come from this package (.claude-plugin/plugin.json and .mcp.json),
+// so the prefix is deterministic. Must match the PreToolUse matcher in
+// hooks/hooks.json.
+const TOOL_PREFIX = "mcp__plugin_hmux_hmux__"
 const FETCH_TIMEOUT_MS = 2000
 
 // Marker files make the PostToolUse context injection cheap-idempotent: the
@@ -68,7 +75,7 @@ const clearMarker = (id: string) => {
   } catch {}
 }
 
-// Signal markers carry a turn-end declaration (mcp__hmux__signal) from the
+// Signal markers carry a turn-end declaration (the hmux signal tool) from the
 // PreToolUse that saw the call to the Stop that ends the turn. The marker
 // outlives Stop on purpose — the ~60s idle Notification must not stomp the
 // declared label — and is cleared when the human acts (UserPromptSubmit) or
@@ -213,9 +220,9 @@ const modelName = (model: unknown): string | undefined => {
 // needs to teach the workflow — no self-declared names to keep honest.
 const boundContext = (_session: SessionInfo): string =>
   "This session is bound to a human inbox via hmux. When you need a decision, " +
-  "clarification, or approval, ask the human with the mcp__hmux__ask tool instead of " +
-  "guessing. Send progress updates and completions with mcp__hmux__notify. Just before " +
-  "ending a turn, declare how it ends with mcp__hmux__signal: status 'question' when your " +
+  `clarification, or approval, ask the human with the ${TOOL_PREFIX}ask tool instead of ` +
+  `guessing. Send progress updates and completions with ${TOOL_PREFIX}notify. Just before ` +
+  `ending a turn, declare how it ends with ${TOOL_PREFIX}signal: status 'question' when your ` +
   "response asks the human something, 'done' when the work is complete."
 
 /** GET the session, or undefined on any failure (server down, 404, bad JSON). */
@@ -278,9 +285,10 @@ const main = async () => {
       // hmux tool call, overriding whatever the model put there. The server
       // treats a registered sessionId as authoritative for agent/project, so
       // an agent cannot impersonate another by lying in tool params.
-      if (typeof input.tool_name !== "string" || !input.tool_name.startsWith("mcp__hmux__")) {
+      if (typeof input.tool_name !== "string" || !input.tool_name.startsWith(TOOL_PREFIX)) {
         return
       }
+      const tool = input.tool_name.slice(TOOL_PREFIX.length)
       const toolInput =
         typeof input.tool_input === "object" && input.tool_input !== null
           ? (input.tool_input as Record<string, unknown>)
@@ -290,12 +298,12 @@ const main = async () => {
       // the label set here holds for the whole wait; PostToolUse returns the
       // pane to busy when the call resolves. signal is a turn-end declaration:
       // stash it for Stop to promote.
-      if (input.tool_name === "mcp__hmux__ask") {
+      if (tool === "ask") {
         const q = typeof toolInput.question === "string" ? toolInput.question : ""
         advertise("message", q ? `asks: ${q.trim().slice(0, 120)}` : "needs decision")
-      } else if (input.tool_name === "mcp__hmux__approve") {
+      } else if (tool === "approve") {
         advertise("message", "approval requested")
-      } else if (input.tool_name === "mcp__hmux__signal") {
+      } else if (tool === "signal") {
         if (typeof toolInput.status === "string") writeSignal(id, toolInput.status)
       }
       console.log(
@@ -377,7 +385,7 @@ const main = async () => {
         await post(`/sessions/${encoded}/status`, { status: "working" })
         return
       }
-      // A declared signal (mcp__hmux__signal) ends the turn as a message —
+      // A declared signal (the hmux signal tool) ends the turn as a message —
       // the agent left the human something, the detail says what. An
       // unsignalled stop honestly doesn't know whether the human is needed,
       // so it rests at idle rather than faking urgency.
