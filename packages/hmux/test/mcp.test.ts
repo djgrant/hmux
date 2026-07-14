@@ -12,7 +12,7 @@ const transcriptPath = join(dir, "abc.jsonl")
 
 const sent: Array<[string, string]> = []
 const openedInClient: Array<[string, string]> = []
-const created: string[] = []
+const created: Array<[string, string | null, string | null]> = []
 let liveTargets: DisplayTarget[] = []
 
 const groups: SessionGroup[] = [
@@ -28,11 +28,18 @@ const groups: SessionGroup[] = [
         target: "api:1", session: "api", name: "claude", dir: "~/Repos/api",
         agent: "api-3f2c · sonnet", active: true, paneCount: 2, paneId: "%7",
         transcript: transcriptPath, status: "message", detail: "approve the plan?",
+        panes: [
+          { paneId: "%7", dir: "~/Repos/api", agent: "api-3f2c · sonnet", active: true, transcript: transcriptPath, status: "message", detail: "approve the plan?" },
+          { paneId: "%9", dir: "~/Repos/api", agent: null, active: false, transcript: null, status: null, detail: null },
+        ],
       },
       {
         target: "api:2", session: "api", name: "server", dir: "~/Repos/api",
         agent: null, active: false, paneCount: 1, paneId: "%8",
         transcript: null, status: null, detail: null,
+        panes: [
+          { paneId: "%8", dir: "~/Repos/api", agent: null, active: false, transcript: null, status: null, detail: null },
+        ],
       },
     ],
   },
@@ -46,7 +53,7 @@ const fakeBackend: Backend = {
   targets: async () => liveTargets,
   openInClient: async (t, c) => void openedInClient.push([t, c.tty]),
   peekInClient: async () => {},
-  create: async (n) => (created.push(n), n),
+  create: async (n, opts) => (created.push([n, opts?.dir ?? null, opts?.command ?? null]), n),
   send: async (paneId, message) => void sent.push([paneId, message]),
   rename: async () => {},
   kill: async () => {},
@@ -125,6 +132,23 @@ describe("hmux mcp tools", () => {
   test("create returns the new target", async () => {
     const client = await connect()
     expect(await call(client, "create", { name: "ideas/webdav" })).toBe("ideas/webdav")
-    expect(created).toEqual(["ideas/webdav"])
+    expect(created).toContainEqual(["ideas/webdav", null, null])
+  })
+
+  test("create threads dir and command through to the backend", async () => {
+    const client = await connect()
+    expect(
+      await call(client, "create", { name: "api/fix-auth", dir: "~/Repos/api", command: "claude" }),
+    ).toBe("api/fix-auth")
+    expect(created).toContainEqual(["api/fix-auth", "~/Repos/api", "claude"])
+  })
+
+  test("list exposes each window's panes", async () => {
+    const client = await connect()
+    const result = JSON.parse(await call(client, "list"))
+    const window = result[0].windows[0]
+    expect(window.panes).toHaveLength(2)
+    expect(window.panes[0]).toMatchObject({ paneId: "%7", agent: "api-3f2c · sonnet", active: true, hasTranscript: true })
+    expect(window.panes[1]).toMatchObject({ paneId: "%9", agent: null, active: false, hasTranscript: false })
   })
 })

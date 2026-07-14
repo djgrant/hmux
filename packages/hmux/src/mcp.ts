@@ -33,7 +33,9 @@ export function buildServer(backend: Backend): McpServer {
         "which agent runs there, and the state that agent advertised. Status priority: " +
         "error > message (the agent left the human something; detail says what) > busy > " +
         "idle. A null status means no agent advertised anything — a plain pane. " +
-        "hasTranscript tells you whether read will work on that window.",
+        "hasTranscript tells you whether read will work on that window. Each window " +
+        "lists its panes: a window can hold several (e.g. an agent beside a dev server), " +
+        "each with its own dir, agent, and advertised state.",
       inputSchema: {},
     },
     async () => {
@@ -53,6 +55,15 @@ export function buildServer(backend: Backend): McpServer {
             status: w.status,
             detail: w.detail,
             hasTranscript: w.transcript !== null,
+            panes: w.panes.map((p) => ({
+              paneId: p.paneId,
+              dir: p.dir,
+              agent: p.agent,
+              active: p.active,
+              status: p.status,
+              detail: p.detail,
+              hasTranscript: p.transcript !== null,
+            })),
           })),
         })),
       )
@@ -147,14 +158,19 @@ export function buildServer(backend: Backend): McpServer {
       title: "Create a session or window",
       description:
         "Create a new session, or — with a slash ('session/window') — a window inside a " +
-        "session, creating the session if it is new. Returns the target; dispatching new " +
-        "work is create followed by send once an agent is running there.",
+        "session, creating the session if it is new. Returns the target. Creation never " +
+        "drops the user in: the session is born detached and stays in the background — " +
+        "call open only when the user asks to look at it. Pass dir to set the working " +
+        "directory and command to launch something there (e.g. 'claude'), so a single " +
+        "create yields a ready-to-work session; otherwise dispatch work as create then send.",
       inputSchema: {
         name: z.string().describe("Session name, or 'session/window'"),
+        dir: z.string().optional().describe("Working directory for the new session (defaults to HOME)"),
+        command: z.string().optional().describe("Command to run in the new pane, e.g. 'claude' to launch an agent"),
       },
     },
-    async ({ name }) => {
-      const target = await backend.create(name)
+    async ({ name, dir, command }) => {
+      const target = await backend.create(name, { dir, command })
       return text(target)
     },
   )

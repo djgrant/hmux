@@ -29,6 +29,24 @@ function tilde(dir: string): string {
   return dir.replace(new RegExp(`^${process.env.HOME}`), "~")
 }
 
+/** Inverse of tilde: expand a leading ~ back to HOME. list() hands out tilde'd
+ * dirs, so a dir routed straight back into create() needs undoing. */
+function untilde(dir: string | undefined): string | undefined {
+  if (!dir) return dir
+  return dir.replace(/^~(?=\/|$)/, process.env.HOME ?? "~")
+}
+
+/** The current working directory of a session's active pane, absolute and
+ * untilde'd — what a new window should inherit. null when tmux can't resolve
+ * it (e.g. the session vanished between calls). */
+async function sessionDir(session: string): Promise<string | null> {
+  // The trailing colon matters: `=session` (session only) resolves no pane and
+  // #{pane_current_path} comes back empty, whereas `=session:` targets the
+  // session's active window — still an exact match on the name — and resolves.
+  const dir = await tmux(["display-message", "-p", "-t", `=${session}:`, "#{pane_current_path}"]).catch(() => "")
+  return dir.trim() || null
+}
+
 interface PaneRow {
   session: string
   windowIndex: string
@@ -284,6 +302,15 @@ export class TmuxBackend implements Backend {
           paneId: (agentPane ?? active).paneId,
           transcript: agentPane?.transcript ?? null,
           ...topStatus(wPanes),
+          panes: wPanes.map((p) => ({
+            paneId: p.paneId,
+            dir: tilde(p.currentPath),
+            agent: p.agent,
+            active: p.paneActive,
+            transcript: p.transcript,
+            status: p.status,
+            detail: p.detail,
+          })),
         })
       }
 
@@ -398,12 +425,18 @@ export class TmuxBackend implements Backend {
     }
   }
 
-  async create(name: string): Promise<string> {
-    const dir = process.env.HOME ?? "/"
+  async create(name: string, opts?: { dir?: string; command?: string }): Promise<string> {
+    const explicitDir = untilde(opts?.dir)
+    // A birthed session has no parent to inherit from, so it falls back to HOME
+    // when no dir was given. A window added to an existing session does have a
+    // parent: it inherits that session's active pane cwd (least surprise — the
+    // same as opening a window by hand), and only HOME as a last resort.
+    const birthDir = explicitDir ?? process.env.HOME ?? "/"
     const slash = name.indexOf("/")
     // No slash: a plain session, its header its own target.
     if (slash < 0) {
-      await tmux(["new-session", "-d", "-s", name, "-c", dir])
+      await tmux(["new-session", "-d", "-s", name, "-c", birthDir])
+      await this.launch(name, opts?.command)
       return name
     }
     // "session/window": a window under the named session. If the session is
@@ -413,14 +446,31 @@ export class TmuxBackend implements Backend {
     const window = name.slice(slash + 1)
     const exists = await tmux(["has-session", "-t", `=${session}`]).then(() => true, () => false)
     if (!exists) {
-      await tmux(["new-session", "-d", "-s", session, "-n", window, "-c", dir])
+      await tmux(["new-session", "-d", "-s", session, "-n", window, "-c", birthDir])
+      await this.launch(session, opts?.command)
       return session
     }
-    // Existing session: add the window and land on it by index.
+    // Existing session: add the window in the session's current directory
+    // unless the caller pinned one — resolve the session's active pane cwd so
+    // the window lands beside its siblings, not in HOME.
+    const windowDir = explicitDir ?? (await sessionDir(session)) ?? process.env.HOME ?? "/"
     const index = (
-      await tmux(["new-window", "-t", `=${session}:`, "-n", window, "-c", dir, "-P", "-F", "#{window_index}"])
+      await tmux(["new-window", "-t", `=${session}:`, "-n", window, "-c", windowDir, "-P", "-F", "#{window_index}"])
     ).trim()
-    return `${session}:${index}`
+    const target = `${session}:${index}`
+    await this.launch(target, opts?.command)
+    return target
+  }
+
+  /**
+   * Run a command in a freshly-created window's active pane. send-keys types
+   * it as if at the shell prompt (a plain command line, not a TUI paste), so
+   * the shell survives when the command exits — the pane stays a session, not
+   * a one-shot that vanishes. A no-op when no command was requested.
+   */
+  private async launch(target: string, command?: string): Promise<void> {
+    if (!command) return
+    await tmux(["send-keys", "-t", target, command, "Enter"])
   }
 
   async send(target: string, message: string): Promise<void> {

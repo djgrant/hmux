@@ -8,6 +8,21 @@
 
 export type Status = "message" | "busy" | "error" | "idle" | (string & {})
 
+/** A single pane within a window — the finest-grained thing a backend addresses. */
+export interface PaneEntry {
+  /** Backend pane handle (tmux pane id, e.g. "%7"); the unit send()/read() address. */
+  paneId: string
+  dir: string
+  /** Advertised agent identity when a harness runs in this pane, else null. */
+  agent: string | null
+  /** The window's currently selected pane. */
+  active: boolean
+  /** Advertised conversation transcript path for this pane's occupant. */
+  transcript: string | null
+  status: Status | null
+  detail: string | null
+}
+
 export interface WindowEntry {
   /** Backend-opaque handle passed back to open(). */
   target: string
@@ -26,6 +41,8 @@ export interface WindowEntry {
   /** Advertised state rolled up from the window's panes. */
   status: Status | null
   detail: string | null
+  /** The window's panes, in tmux order. paneCount is panes.length. */
+  panes: PaneEntry[]
 }
 
 export interface SessionGroup {
@@ -85,8 +102,14 @@ export interface Backend {
    * Create a session, or — when the name carries a slash ("session/window") —
    * a window inside that session, birthing the session first if it's new.
    * Returns the target of whatever was made, ready to hand to open().
+   *
+   * Creation never attaches or focuses: the new pane is born detached, so an
+   * agent can prepare a session without disturbing the user. Dropping the user
+   * in is a separate, explicit open(). `opts.dir` sets the working directory
+   * (defaults to HOME); `opts.command` is run in the new pane's shell (e.g.
+   * launching the agent), so create+command yields a live session in one step.
    */
-  create(name: string): Promise<string>
+  create(name: string, opts?: { dir?: string; command?: string }): Promise<string>
   /**
    * Remember the picker's cursor across restarts. Server-scoped by nature: the
    * saved target is a pointer into the live sessions, so it lives and dies with
