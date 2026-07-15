@@ -2,8 +2,4 @@
 
 ## Vendored Repositories
 
-External repositories may be vendored locally under `./repos` as read-only reference material. `./repos` is git-ignored: it is never committed or pushed, so it stays out of the published history.
-
-When the directory is present, prefer examples from its source over search results.
-
-Do not import from `./repos`; application code should continue importing from normal package dependencies.
+External library source is vendored in the shared `~/Repos/vendors` store (effect, opencode, opentui, …) as read-only reference material. See the `vendored-repos` skill: prefer its examples over web search, and never import from it.
