@@ -1,0 +1,17 @@
+{
+  "name": "hmux",
+  "interface": {
+    "displayName": "hmux"
+  },
+  "plugins": [
+    {
+      "name": "hmux",
+      "source": "./packages/codex-plugin",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

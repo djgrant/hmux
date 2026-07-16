@@ -1,0 +1,25 @@
+{
+  "name": "hmux",
+  "version": "0.1.0",
+  "description": "Registers Codex sessions with hmux for live presence and human-in-the-loop messaging.",
+  "author": { "name": "djgrant", "url": "https://github.com/djgrant" },
+  "homepage": "https://github.com/djgrant/hmux#readme",
+  "repository": "https://github.com/djgrant/hmux",
+  "license": "MIT",
+  "keywords": ["hmux", "codex", "human-in-the-loop"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "hmux",
+    "shortDescription": "Live agent presence and a human inbox",
+    "longDescription": "Show Codex session status in hmux and route questions, approvals, and progress updates through the human inbox.",
+    "developerName": "djgrant",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/djgrant/hmux",
+    "defaultPrompt": [
+      "Show my active agent sessions.",
+      "Ask me before choosing between approaches.",
+      "Send me progress updates while you work."
+    ]
+  }
+}

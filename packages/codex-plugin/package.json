@@ -1,0 +1,11 @@
+{
+  "name": "hmux-codex-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex hooks for hmux session presence and human-in-the-loop tools.",
+  "type": "module",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/djgrant/hmux.git", "directory": "packages/codex-plugin" },
+  "engines": { "bun": ">=1.0.0" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}
