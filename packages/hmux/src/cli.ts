@@ -28,12 +28,19 @@ if (process.argv[2] === "wait") {
     console.error("usage: hmux wait <target> [--timeout <seconds>]")
     process.exit(2)
   }
-  const { findWindow } = await import("./backend")
+  const { resolvePane } = await import("./backend")
   const { TmuxBackend } = await import("./tmux")
   const backend = new TmuxBackend(false)
   await backend.ensure()
+  // Pane-precise: waiting on "%7" tracks that agent alone; a window target
+  // tracks its sole agent pane; an ambiguous window falls back to its rollup.
   const result = await waitForSettle(
-    async () => findWindow(await backend.list(), args.target)?.status,
+    async () => {
+      const res = resolvePane(await backend.list(), args.target)
+      if (res.kind === "pane") return res.pane.status
+      if (res.kind === "ambiguous") return res.window.status
+      return undefined
+    },
     { timeoutMs: args.timeoutMs },
   )
   if (result.outcome === "settled") {

@@ -54,6 +54,7 @@ interface PaneRow {
   windowActive: boolean
   paneActive: boolean
   paneId: string
+  paneIndex: number
   currentPath: string
   agent: string | null
   status: string | null
@@ -245,11 +246,11 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_id}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}${SEP}#{@hmux_transcript}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_id}${SEP}#{pane_index}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}${SEP}#{@hmux_transcript}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, windowActive, paneActive, paneId, currentPath, agent, status, detail, transcript] =
+        const [session, windowIndex, windowName, windowActive, paneActive, paneId, paneIndex, currentPath, agent, status, detail, transcript] =
           line.split(SEP)
         const rows = panesBySession.get(session) ?? []
         rows.push({
@@ -259,6 +260,7 @@ export class TmuxBackend implements Backend {
           windowActive: windowActive === "1",
           paneActive: paneActive === "1",
           paneId,
+          paneIndex: Number(paneIndex),
           currentPath,
           agent: agent ? sanitize(agent) : null,
           status: status ? sanitize(status) : null,
@@ -304,6 +306,7 @@ export class TmuxBackend implements Backend {
           ...topStatus(wPanes),
           panes: wPanes.map((p) => ({
             paneId: p.paneId,
+            paneIndex: p.paneIndex,
             dir: tilde(p.currentPath),
             agent: p.agent,
             active: p.paneActive,

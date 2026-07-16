@@ -15,11 +15,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
-import { findWindow, type Backend } from "./backend"
+import { resolvePane, type Backend, type PaneResolution, type SessionGroup } from "./backend"
 import { readTranscript, transcriptFromResume } from "./transcript"
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] })
 const json = (value: unknown) => text(JSON.stringify(value, null, 2))
+
+/** A miss that teaches: name the live targets so the caller self-corrects
+ * without a list round-trip. */
+const noMatch = (groups: SessionGroup[], target: string) => {
+  const targets = groups.flatMap((g) => g.windows.map((w) => w.target))
+  return `Nothing matches '${target}'. Live targets: ${targets.join(", ") || "(none)"}.`
+}
+
+/** An ambiguous window names its agent panes so the caller picks one. */
+const whichPane = (res: Extract<PaneResolution, { kind: "ambiguous" }>) =>
+  `'${res.window.target}' holds ${res.agents.length} agents — address the pane: ` +
+  res.agents.map((p) => `${p.paneId} (${p.agent ?? "transcript only"})`).join(", ")
 
 export function buildServer(backend: Backend): McpServer {
   const server = new McpServer({ name: "hmux", version: "0.0.0" })
@@ -57,6 +69,7 @@ export function buildServer(backend: Backend): McpServer {
             hasTranscript: w.transcript !== null,
             panes: w.panes.map((p) => ({
               paneId: p.paneId,
+              paneIndex: p.paneIndex,
               dir: p.dir,
               agent: p.agent,
               active: p.active,
@@ -81,15 +94,22 @@ export function buildServer(backend: Backend): McpServer {
         "A window whose agent advertised no transcript is opaque: the user can open it " +
         "themselves, but you cannot read it.",
       inputSchema: {
-        target: z.string().describe("Window target from list, e.g. 'api:1' (a bare session name reads its first window)"),
+        target: z.string().describe(
+          "Any target from list: a pane id like '%7' (the agent's pane), a window like 'api:1' " +
+            "(its sole agent pane), or a bare session (its first window). A window holding " +
+            "several agents must be addressed by pane.",
+        ),
         turns: z.number().int().positive().optional().describe("How many trailing turns (default 20)"),
         includeToolResults: z.boolean().optional().describe("Include tool result content (verbose)"),
       },
     },
     async ({ target, turns, includeToolResults }) => {
-      const window = findWindow(await backend.list(), target)
-      if (!window) return text(`No window matches '${target}' — check list.`)
-      const path = window.transcript ?? (await resumePath(window.paneId))
+      const groups = await backend.list()
+      const res = resolvePane(groups, target)
+      if (res.kind === "none") return text(noMatch(groups, target))
+      if (res.kind === "ambiguous") return text(whichPane(res))
+      const { window, pane } = res
+      const path = pane.transcript ?? (await resumePath(pane.paneId))
       if (!path)
         return text(
           `'${target}' advertised no transcript — it is opaque to read. ` +
@@ -97,7 +117,9 @@ export function buildServer(backend: Backend): McpServer {
         )
       try {
         const conversation = await readTranscript(path, { turns, includeToolResults })
-        return json({ target, agent: window.agent, transcript: path, turns: conversation })
+        // Echo the resolved addresses, not the caller's alias, so follow-up
+        // sends have the canonical target.
+        return json({ target: window.target, pane: pane.paneId, agent: pane.agent, transcript: path, turns: conversation })
       } catch {
         return text(`Transcript at ${path} could not be read (moved or deleted?).`)
       }
@@ -115,17 +137,23 @@ export function buildServer(backend: Backend): McpServer {
         "The reply lands in that session; read it with read after giving the agent time " +
         "to respond.",
       inputSchema: {
-        target: z.string().describe("Window target from list, e.g. 'api:1'"),
+        target: z.string().describe(
+          "Any target from list: a pane id like '%7' delivers to exactly that pane; a window " +
+            "like 'api:1' delivers to its sole agent pane (ambiguous when it holds several).",
+        ),
         message: z.string().describe("The message to type into the agent's prompt"),
       },
     },
     async ({ target, message }) => {
-      const window = findWindow(await backend.list(), target)
-      if (!window) return text(`No window matches '${target}' — check list.`)
-      await backend.send(window.paneId, message)
+      const groups = await backend.list()
+      const res = resolvePane(groups, target)
+      if (res.kind === "none") return text(noMatch(groups, target))
+      if (res.kind === "ambiguous") return text(whichPane(res))
+      const { pane } = res
+      await backend.send(pane.paneId, message)
       return text(
-        `Sent to ${target} (${window.agent ?? "no advertised agent"}). ` +
-          `If you need its reply, \`hmux wait ${target}\` in a background shell exits ` +
+        `Sent to ${pane.paneId} (${pane.agent ?? "no advertised agent"}). ` +
+          `If you need its reply, \`hmux wait ${pane.paneId}\` in a background shell exits ` +
           "when the agent settles; then read.",
       )
     },

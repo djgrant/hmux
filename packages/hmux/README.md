@@ -58,8 +58,10 @@ For **one** overseer agent — a chief of staff that reads each session's conver
 Five tools:
 
 - `list` — the map: sessions, windows, agents, advertised status, transcript availability.
-- `read` — a window's recent conversation, from its advertised transcript (tool results elided by default). hmux never inspects the pane itself, so a window with no advertised transcript is opaque. Sessions advertised before `--transcript` existed fall back to the resume command's session id.
-- `send` — paste a message into the agent's prompt and submit it, exactly as if you had typed it there. The reply lands in that session; `read` picks it up. A sender that needs the reply can arm `hmux wait <target>` in a background shell: it blocks until the agent settles (status leaves `busy` — via a busy→settled transition, or a grace period when no busy is ever seen, so arming just after a send doesn't return early), prints the final status, and exits (`--timeout <seconds>` exits 3 on expiry).
+- `read` — an agent's recent conversation, from its advertised transcript (tool results elided by default). hmux never inspects the pane itself, so a pane with no advertised transcript is opaque. Sessions advertised before `--transcript` existed fall back to the resume command's session id.
+- `send` — paste a message into the agent's prompt and submit it, exactly as if you had typed it there.
+
+  Both address a **pane** — that's where an agent lives. Any target from `list` works: a pane id (`%7`) means exactly that pane; a window (`api:1`) means its sole agent pane, and is refused with the candidates named when the window holds several agents; a bare session means its first window. The reply lands in that session; `read` picks it up. A sender that needs the reply can arm `hmux wait <target>` in a background shell: it blocks until the agent settles (status leaves `busy` — via a busy→settled transition, or a grace period when no busy is ever seen, so arming just after a send doesn't return early), prints the final status, and exits (`--timeout <seconds>` exits 3 on expiry).
 - `open` — load a session into your parked display target (`hmux target`), for when you want eyes on it yourself.
 - `create` — new session or `session/window`; dispatching new work is a `create` followed by a `send`.
 

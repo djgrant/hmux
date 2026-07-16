@@ -12,6 +12,8 @@ export type Status = "message" | "busy" | "error" | "idle" | (string & {})
 export interface PaneEntry {
   /** Backend pane handle (tmux pane id, e.g. "%7"); the unit send()/read() address. */
   paneId: string
+  /** Pane index within its window (tmux #{pane_index}); may follow a configured base index. */
+  paneIndex: number
   dir: string
   /** Advertised agent identity when a harness runs in this pane, else null. */
   agent: string | null
@@ -137,6 +139,46 @@ export function findWindow(groups: SessionGroup[], target: string): WindowEntry 
     if (window) return window
   }
   return undefined
+}
+
+/**
+ * Resolve any target list() hands out to the pane send/read should address.
+ * The pane is the real unit — an agent lives in a pane, and a window can hold
+ * several; window and session targets are container conveniences:
+ *
+ *   "%7"       → exactly that pane
+ *   "api:1.2"  → the pane whose tmux index is 2
+ *   "api:1"    → the window's sole agent pane; ambiguous when several agents
+ *                advertised, the active pane when none did
+ *   "api"      → the session's first window, then the same rules
+ */
+export type PaneResolution =
+  | { kind: "pane"; window: WindowEntry; pane: PaneEntry }
+  | { kind: "ambiguous"; window: WindowEntry; agents: PaneEntry[] }
+  | { kind: "none" }
+
+export function resolvePane(groups: SessionGroup[], target: string): PaneResolution {
+  // Pane handles belong to the backend: tmux uses "%7", but another backend
+  // need not. Exact handles win before container target syntax is interpreted.
+  for (const group of groups)
+    for (const window of group.windows) {
+      const pane = window.panes.find((p) => p.paneId === target)
+      if (pane) return { kind: "pane", window, pane }
+    }
+
+  // A trailing ".N" names a pane by its advertised index, but only after a ":" — session
+  // names may themselves contain dots (e.g. "humans.sh").
+  const dotted = target.includes(":") ? target.match(/^(.+)\.(\d+)$/) : null
+  const window = findWindow(groups, dotted ? dotted[1] : target)
+  if (!window) return { kind: "none" }
+  if (dotted) {
+    const pane = window.panes.find((p) => p.paneIndex === Number(dotted[2]))
+    return pane ? { kind: "pane", window, pane } : { kind: "none" }
+  }
+  const agents = window.panes.filter((p) => p.agent || p.transcript)
+  if (agents.length > 1) return { kind: "ambiguous", window, agents }
+  const pane = agents[0] ?? window.panes.find((p) => p.active) ?? window.panes[0]
+  return pane ? { kind: "pane", window, pane } : { kind: "none" }
 }
 
 /** error beats message beats busy beats idle/unadvertised. */
