@@ -31,10 +31,42 @@ const OPTIONS: Record<keyof AdvertiseFields, string> = {
   transcript: "@hmux_transcript",
 }
 
+/**
+ * True when this process actually runs inside the given pane. TMUX_PANE alone
+ * is not proof: a GUI app launched from a tmux shell (e.g. Zed) inherits the
+ * variable into its whole process tree, and a caller in its integrated
+ * terminal would stamp status onto a pane it does not occupy. The pane's tty
+ * versus our controlling tty settles it.
+ */
+function occupiesPane(pane: string): boolean {
+  try {
+    const paneTty = Bun.spawnSync(
+      ["tmux", "display-message", "-p", "-t", pane, "#{pane_tty}"],
+      { stdout: "pipe", stderr: "ignore" },
+    )
+      .stdout.toString()
+      .trim()
+    if (paneTty.length === 0) return false
+    // Controlling tty via ps — stdin is often a pipe here (hooks), so `tty`
+    // on a descriptor would lie. ps prints e.g. "ttys004", or "??" without one.
+    const myTty = Bun.spawnSync(["ps", "-o", "tty=", "-p", String(process.pid)], {
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+      .stdout.toString()
+      .trim()
+    if (myTty.length === 0 || myTty === "??" || myTty === "?") return false
+    return paneTty === (myTty.startsWith("/") ? myTty : `/dev/${myTty}`)
+  } catch {
+    return false
+  }
+}
+
 /** Write the given fields onto the calling pane. No-op outside a pane. */
 export function advertise(fields: AdvertiseFields): void {
   const pane = process.env.TMUX_PANE
   if (!pane) return
+  if (!occupiesPane(pane)) return
   for (const [field, option] of Object.entries(OPTIONS) as [keyof AdvertiseFields, string][]) {
     const value = fields[field]
     if (value === undefined) continue
