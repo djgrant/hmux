@@ -92,6 +92,12 @@ const advertise = (fields: {
   } catch {}
 }
 
+const clearAdvertise = () => {
+  try {
+    spawnSync("hmux", ["advertise", "--clear"], { stdio: "ignore" })
+  } catch {}
+}
+
 const gitBranch = (cwd: string): string | undefined => {
   try {
     const branch = execFileSync("git", ["-C", cwd, "branch", "--show-current"], {
@@ -233,6 +239,14 @@ const main = async () => {
         advertise({ status: "idle" })
         await post(`/sessions/${encoded}/status`, { status: "idle" })
       }
+      return
+    }
+
+    case "SessionEnd": {
+      clearState("bound", id)
+      clearState("signal", id)
+      clearAdvertise()
+      await post(`/sessions/${encoded}/end`)
     }
   }
 }
