@@ -19,6 +19,17 @@ export async function tmux(args: string[]): Promise<string> {
   return out
 }
 
+/** True when the pid exists (EPERM still means alive, just not ours). */
+function advertiserAlive(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 1) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM"
+  }
+}
+
 /** Strip control chars so advertised text can't corrupt the UI. */
 export function sanitize(s: string): string {
   // eslint-disable-next-line no-control-regex
@@ -139,6 +150,13 @@ export class TmuxBackend implements Backend {
   /** Pass the result of insideTmux(); the env var alone is not trusted. */
   constructor(private inTmux = false) {}
 
+  /** Unset a dead advertiser's attention options (see list()). Failure-silent. */
+  private async clearGhost(paneId: string): Promise<void> {
+    for (const option of ["@hmux_status", "@hmux_detail", "@hmux_agent", "@hmux_pid"]) {
+      await tmux(["set-option", "-pu", "-t", paneId, option]).catch(() => {})
+    }
+  }
+
   async ensure(): Promise<void> {
     // Persistence rides along with readiness: every long-lived hmux process
     // (picker or parked target) refreshes the snapshot; the mtime guard in
@@ -246,12 +264,21 @@ export class TmuxBackend implements Backend {
         "list-panes",
         "-a",
         "-F",
-        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_id}${SEP}#{pane_index}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}${SEP}#{@hmux_transcript}`,
+        `#{session_name}${SEP}#{window_index}${SEP}#{window_name}${SEP}#{window_active}${SEP}#{pane_active}${SEP}#{pane_id}${SEP}#{pane_index}${SEP}#{pane_current_path}${SEP}#{@hmux_agent}${SEP}#{@hmux_status}${SEP}#{@hmux_detail}${SEP}#{@hmux_transcript}${SEP}#{@hmux_pid}`,
       ])
       for (const line of panesOut.split("\n")) {
         if (!line) continue
-        const [session, windowIndex, windowName, windowActive, paneActive, paneId, paneIndex, currentPath, agent, status, detail, transcript] =
+        const [session, windowIndex, windowName, windowActive, paneActive, paneId, paneIndex, currentPath, agent, status, detail, transcript, pid] =
           line.split(SEP)
+        // Advertised state is only as alive as its advertiser (@hmux_pid,
+        // stamped by `hmux advertise`). A dead advertiser means the agent was
+        // killed or crashed before its clear could run: present the pane as
+        // unadvertised and heal the ghost options so every reader agrees.
+        // Every writer goes through `hmux advertise`, which always stamps a
+        // pid, so pid-less state is a ghost from before the pid existed.
+        // resume/transcript survive — they exist to outlast the occupant.
+        const stale = !!(agent || status) && !advertiserAlive(Number(pid))
+        if (stale) void this.clearGhost(paneId)
         const rows = panesBySession.get(session) ?? []
         rows.push({
           session,
@@ -262,9 +289,9 @@ export class TmuxBackend implements Backend {
           paneId,
           paneIndex: Number(paneIndex),
           currentPath,
-          agent: agent ? sanitize(agent) : null,
-          status: status ? sanitize(status) : null,
-          detail: detail ? sanitize(detail) : null,
+          agent: agent && !stale ? sanitize(agent) : null,
+          status: status && !stale ? sanitize(status) : null,
+          detail: detail && !stale ? sanitize(detail) : null,
           transcript: transcript ? sanitize(transcript) : null,
         })
         panesBySession.set(session, rows)
