@@ -5,7 +5,8 @@
  * `hmux advertise`) and this module reads them back and rolls them up
  * pane → window → session.
  */
-import { statSync } from "node:fs"
+import { mkdirSync, rmdirSync, statSync } from "node:fs"
+import { dirname } from "node:path"
 import { topStatus, type Backend, type DisplayTarget, type SessionGroup, type WindowEntry } from "./backend"
 import { focusTerminal } from "terminal-focus"
 import { HOLD_SESSION, registeredTargets } from "./targets"
@@ -123,7 +124,26 @@ function resurrectScript(name: "save.sh" | "restore.sh"): string | null {
  * server, so save() copies them into this manifest and ensure() replays
  * them once resurrect has rebuilt the panes.
  */
-const RESUME_MANIFEST = `${process.env.HOME}/.local/share/hmux/resume.json`
+const STATE_DIR = `${process.env.HOME}/.local/share/hmux`
+const RESUME_MANIFEST = `${STATE_DIR}/resume.json`
+
+/**
+ * tmux-resurrect names snapshots to the second and writes them in place, so
+ * two hmux processes saving together corrupt the same file. Directory
+ * creation is atomic across processes; only its owner may call save.sh.
+ */
+const SAVE_LOCK = `${STATE_DIR}/save.lock`
+
+export function acquireSaveLock(path = SAVE_LOCK): (() => void) | null {
+  mkdirSync(dirname(path), { recursive: true })
+  try {
+    mkdirSync(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null
+    throw error
+  }
+  return () => rmdirSync(path)
+}
 
 /** How often the snapshot is refreshed, machine-wide (see save()). */
 const SAVE_INTERVAL_MS = 60_000
@@ -159,8 +179,8 @@ export class TmuxBackend implements Backend {
 
   async ensure(): Promise<void> {
     // Persistence rides along with readiness: every long-lived hmux process
-    // (picker or parked target) refreshes the snapshot; the mtime guard in
-    // save() collapses them to one save per interval machine-wide.
+    // (picker or parked target) refreshes the snapshot; the lock and mtime
+    // guard in save() collapse them to one save per interval machine-wide.
     if (resurrectScript("save.sh"))
       setInterval(() => void this.save().catch(() => {}), SAVE_INTERVAL_MS)
     const alive = await tmux(["list-sessions"]).then(() => true, () => false)
@@ -182,20 +202,25 @@ export class TmuxBackend implements Backend {
   private async save(): Promise<void> {
     const script = resurrectScript("save.sh")
     if (!script) return
-    // Every hmux process runs its own save timer, so the last write acts as
-    // the shared clock: skip when a recent save exists and N processes
-    // collapse to roughly one save per interval machine-wide.
+    const release = acquireSaveLock()
+    if (!release) return
     try {
-      const age = Date.now() - statSync(RESUME_MANIFEST).mtimeMs
-      if (age < SAVE_INTERVAL_MS - 5_000) return
-    } catch {} // no manifest yet — save
-    // Only real sessions are worth snapshotting: saving while just hmux's own
-    // plumbing exists would overwrite the last good snapshot with an empty one.
-    const out = await tmux(["list-sessions", "-F", "#{session_name}"]).catch(() => "")
-    const real = out.split("\n").filter((s) => s && s !== HOLD_SESSION && s !== BOOT_SESSION)
-    if (real.length === 0) return
-    await runResurrect(script, ["quiet"])
-    await this.saveResumes().catch(() => {})
+      // Check freshness only after taking the lock. Checking first lets every
+      // picker observe the same old manifest and enter save.sh together.
+      try {
+        const age = Date.now() - statSync(RESUME_MANIFEST).mtimeMs
+        if (age < SAVE_INTERVAL_MS - 5_000) return
+      } catch {} // no manifest yet — save
+      // Only real sessions are worth snapshotting: saving while just hmux's own
+      // plumbing exists would overwrite the last good snapshot with an empty one.
+      const out = await tmux(["list-sessions", "-F", "#{session_name}"]).catch(() => "")
+      const real = out.split("\n").filter((s) => s && s !== HOLD_SESSION && s !== BOOT_SESSION)
+      if (real.length === 0) return
+      await runResurrect(script, ["quiet"])
+      await this.saveResumes().catch(() => {})
+    } finally {
+      release()
+    }
   }
 
   /** Copy advertised resume commands off the panes into the manifest. */
