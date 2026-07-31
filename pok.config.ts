@@ -14,13 +14,13 @@ export default defineConfig({
   theme: { preset: 'minimal' },
   plugins: [
     release({
-      packages: {
-        files: [
-          'packages/hmux/package.json',
-          'packages/focus/package.json',
-          'packages/cc-plugin/.claude-plugin/plugin.json',
-        ],
-      },
+      packages: [
+        { file: 'packages/hmux/package.json', build: 'pnpm --filter @djgrant/hmux run build' },
+        // terminal-focus publishes src/ directly; no build artifact.
+        { file: 'packages/focus/package.json', build: false },
+        // Claude plugin manifest: version-bumped only, not published to npm.
+        { file: 'packages/cc-plugin/.claude-plugin/plugin.json', publish: false },
+      ],
     }),
   ],
 });
